@@ -99,6 +99,3 @@ Cuando vayas a programar algo nuevo, **nunca** lo hagas directamente en `develop
 1. Descarga la app **Expo Go** (App Store o Play Store).
 2. Asegúrate de que tu celular y tu PC estén conectados a la **misma red Wi-Fi**.
 3. Ejecuta `npx expo start` y escanea el código QR que aparecerá en la terminal.
-
----
-*Si tienes dudas, consulta con el encargado del proyecto.* 🚀
