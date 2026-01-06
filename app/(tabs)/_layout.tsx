@@ -63,6 +63,14 @@ export default function TabLayout() {
           tabBarIcon: ({ color }) => <TabBarIcon name="search" color={color} />,
         }}
       />
+      <Tabs.Screen
+        name="DetailedDescription"
+        options={{
+          title: 'Detalle',
+          tabBarIcon: ({ color }) => <TabBarIcon name="info" color={color} />,
+          headerShown: false,
+        }}
+      />
     </Tabs>
   );
 }
