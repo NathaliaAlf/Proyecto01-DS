@@ -1,6 +1,7 @@
 import { saveUserIfNotExists } from "@/services/userService";
-import { deleteItem, getItem, saveItem } from "@/utils/storage";
+import { getItem, saveItem } from "@/utils/storage";
 import * as AuthSession from "expo-auth-session";
+import * as SecureStore from "expo-secure-store";
 import * as WebBrowser from "expo-web-browser";
 import { jwtDecode } from "jwt-decode";
 import React, { createContext, useContext, useEffect, useState } from "react";
@@ -93,7 +94,7 @@ export function AuthProvider({ children }: { children: React.ReactNode }) {
     exchangeToken();
   }, [response]);
 
-  
+
   useEffect(() => {
     const restoreSession = async () => {
       try {
@@ -128,15 +129,24 @@ export function AuthProvider({ children }: { children: React.ReactNode }) {
 
   const logout = async () => {
     setUser(null);
-    await deleteItem("authTokens");
+    await SecureStore.deleteItemAsync("authTokens");
+    setLoading(false);
   };
 
-  /* ---------- DEBUG ---------- */
+
   useEffect(() => {
     if (user) {
       console.log("Logged in user:", user.name);
     }
   }, [user]);
+
+
+  useEffect(() => {
+    if (__DEV__) {
+      // @ts-ignore
+      global.logout = logout;
+    }
+  }, []);
 
   return (
     <AuthContext.Provider value={{ user, loading, login, logout }}>
