@@ -1,10 +1,10 @@
+import { Text } from '@/components/Themed';
+import { useColorScheme } from '@/components/useColorScheme';
+import Colors from '@/constants/Colors';
+import { gbifService } from '@/services/gbifService';
+import { GBIFSpecies } from '@/services/gbifTypes';
 import React, { useState } from 'react';
 import { ActivityIndicator, FlatList, StyleSheet, TextInput, View } from 'react-native';
-import { Text } from '../../components/Themed';
-import { useColorScheme } from '../../components/useColorScheme';
-import Colors from '../../constants/Colors';
-import { gbifService } from '../../services/gbifService';
-import { GBIFSpecies } from '../../services/gbifTypes';
 
 export default function SpeciesScreen() {
   const [query, setQuery] = useState('');
