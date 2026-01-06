@@ -1,4 +1,4 @@
-import { GBIFSearchResponse } from './gbifTypes';
+import { GBIFSearchResponse } from '@/services/gbifTypes';
 
 const BASE_URL = 'https://api.gbif.org/v1';
 
