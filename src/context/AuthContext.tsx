@@ -11,19 +11,28 @@ WebBrowser.maybeCompleteAuthSession();
 const AUTH0_DOMAIN = process.env.EXPO_PUBLIC_AUTH0_DOMAIN!;
 const AUTH0_CLIENT_ID = process.env.EXPO_PUBLIC_AUTH0_CLIENT_ID!;
 
-type UserProfile = {
+export type Auth0Profile = {
   sub: string;
   name?: string;
   email?: string;
   picture?: string;
 };
 
+export type AppUser = {
+  uid: string;
+  name: string | null;
+  email: string | null;
+  photoURL: string | null;
+};
+
+
 type AuthContextType = {
-  user: UserProfile | null;
+  user: AppUser | null;
   login: () => Promise<void>;
   logout: () => Promise<void>;
   loading: boolean;
 };
+
 
 const AuthContext = createContext<AuthContextType | undefined>(undefined);
 
@@ -33,7 +42,7 @@ const discovery = {
 };
 
 export function AuthProvider({ children }: { children: React.ReactNode }) {
-  const [user, setUser] = useState<UserProfile | null>(null);
+  const [user, setUser] = useState<AppUser | null>(null);
   const [loading, setLoading] = useState(true);
 
   const redirectUri = AuthSession.makeRedirectUri({
@@ -81,8 +90,11 @@ export function AuthProvider({ children }: { children: React.ReactNode }) {
 
         await saveItem("authTokens", JSON.stringify(storedTokens));
 
-        const profile = jwtDecode<UserProfile>(tokenResult.idToken!);
-        setUser(profile);
+        const auth0Profile = jwtDecode<Auth0Profile>(tokenResult.idToken!);
+        const firebaseUser = await saveUserIfNotExists(auth0Profile);
+        setUser(firebaseUser);
+
+
       } catch (e) {
         console.error("Auth error:", e);
         setUser(null);
@@ -106,10 +118,11 @@ export function AuthProvider({ children }: { children: React.ReactNode }) {
             idToken: string;
           } = JSON.parse(stored);
 
-          const profile = jwtDecode<UserProfile>(tokens.idToken);
+          const auth0Profile = jwtDecode<Auth0Profile>(tokens.idToken);
+          const firebaseUser = await saveUserIfNotExists(auth0Profile);
+          setUser(firebaseUser);
 
-          setUser(profile);
-          await saveUserIfNotExists(profile);
+
         }
       } catch {
         setUser(null);
@@ -123,7 +136,7 @@ export function AuthProvider({ children }: { children: React.ReactNode }) {
 
   /* ---------- ACTIONS ---------- */
   const login = async () => {
-    if (!request) return; // ✅ prevent early call
+    if (!request) return;
     await promptAsync();
   };
 
@@ -154,8 +167,6 @@ export function AuthProvider({ children }: { children: React.ReactNode }) {
     </AuthContext.Provider>
   );
 }
-
-/* ================= HOOK ================= */
 
 export function useAuth() {
   const context = useContext(AuthContext);

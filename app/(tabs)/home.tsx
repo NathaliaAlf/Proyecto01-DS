@@ -1,7 +1,7 @@
 import FontAwesome from '@expo/vector-icons/FontAwesome';
 import MaterialCommunityIcons from '@expo/vector-icons/MaterialCommunityIcons';
 import React from 'react';
-import { Dimensions, Pressable, ScrollView, StyleSheet, Text, TextInput, View } from 'react-native';
+import { Dimensions, Image, Pressable, ScrollView, StyleSheet, Text, TextInput, View } from 'react-native';
 
 const { width } = Dimensions.get('window');
 
@@ -12,7 +12,13 @@ export default function DetailedDescriptionScreen() {
       <View style={styles.header}>
         <View style={styles.headerTop}>
           <View style={styles.logoContainer}>
-             {/* DNA Isotype simulation */}
+             {/* Logo */}
+             <Pressable>
+                <Image
+                    source={require("@/assets/images/logo.png")}
+                    resizeMode='contain'
+                />
+             </Pressable>
              <MaterialCommunityIcons name="dna" size={20} color="white" style={{marginRight: 5}} />
              <Text style={styles.logoText}>LIFE</Text>
           </View>
