@@ -1,28 +1,44 @@
-import { Text } from '@/components/Themed';
-import { useColorScheme } from '@/components/useColorScheme';
+// Update your SpeciesScreen to handle search from header
 import Colors from '@/constants/Colors';
 import { gbifService } from '@/services/gbifService';
 import { GBIFSpecies } from '@/services/gbifTypes';
-import React, { useState } from 'react';
-import { ActivityIndicator, FlatList, StyleSheet, TextInput, View } from 'react-native';
+import { useLocalSearchParams } from 'expo-router';
+import { useEffect, useState } from 'react';
+import { ActivityIndicator, FlatList, StyleSheet, Text, TextInput, useColorScheme, View } from 'react-native';
 
 export default function SpeciesScreen() {
   const [query, setQuery] = useState('');
   const [results, setResults] = useState<GBIFSpecies[]>([]);
   const [loading, setLoading] = useState(false);
   const colorScheme = useColorScheme() ?? 'light';
+  
+  // Get search parameter from navigation
+  const params = useLocalSearchParams();
+  const searchFromHeader = params.search as string;
 
-  const handleSearch = async () => {
-    if (!query) return;
+  // Effect to handle search from header
+  useEffect(() => {
+    if (searchFromHeader) {
+      setQuery(searchFromHeader);
+      performSearch(searchFromHeader);
+    }
+  }, [searchFromHeader]);
+
+  const performSearch = async (searchTerm: string) => {
+    if (!searchTerm) return;
     setLoading(true);
     try {
-      const data = await gbifService.searchSpecies(query);
+      const data = await gbifService.searchSpecies(searchTerm);
       setResults(data.results);
     } catch (error) {
       console.error(error);
     } finally {
       setLoading(false);
     }
+  };
+
+  const handleSearch = async () => {
+    await performSearch(query);
   };
 
   return (
