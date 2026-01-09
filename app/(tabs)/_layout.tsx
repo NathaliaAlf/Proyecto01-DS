@@ -29,6 +29,12 @@ export default function TabLayout() {
   const SIDE_ELEMENTS_WIDTH = 400; 
   const availableWidth = Math.max(screenWidth - SIDE_ELEMENTS_WIDTH, 100);
 
+  const handleLogoPress = () => {
+    router.push({
+      pathname: '/home',
+    });
+  };
+
   const handleHeaderSearch = async () => {
     if (!searchQuery.trim()) return;
     
@@ -130,7 +136,7 @@ export default function TabLayout() {
         },
         headerLeft: () => (
           <View style={styles.headerLeft}>
-            <TouchableOpacity>
+            <TouchableOpacity onPress={() => handleLogoPress()}>
               <Image
                 source={require("@/assets/images/logo.png")}
                 style={styles.logo}
@@ -172,9 +178,9 @@ export default function TabLayout() {
       }}
     >
       <Tabs.Screen
-        name="index"
+        name="home"
         options={{
-          title: 'Inicio',
+          title: 'Home',
           tabBarIcon: ({ color, focused }) => (
             <Ionicons name={focused ? 'home' : 'home-outline'} color={color} size={24} />
           ),

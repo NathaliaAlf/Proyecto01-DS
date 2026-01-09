@@ -1,11 +1,13 @@
 import FontAwesome from '@expo/vector-icons/FontAwesome';
 import MaterialCommunityIcons from '@expo/vector-icons/MaterialCommunityIcons';
+import { useLocalSearchParams } from 'expo-router';
 import React from 'react';
 import { Dimensions, Pressable, ScrollView, StyleSheet, Text, TextInput, View } from 'react-native';
 
 const { width } = Dimensions.get('window');
 
 export default function DetailedDescriptionScreen() {
+  const { speciesKey, scientificName } = useLocalSearchParams();
   return (
     <View style={styles.container}>
       {/* Header */}
@@ -36,7 +38,7 @@ export default function DetailedDescriptionScreen() {
         <View style={styles.section}>
           <View style={styles.titleContainer}>
              <FontAwesome name="arrow-left" size={20} color="#1A4508" />
-             <Text style={styles.scientificName}>Eugauria albidentata (Hampson, 1897)</Text>
+             <Text style={styles.scientificName}>{scientificName}</Text>
           </View>
 
           {/* Gallery */}
