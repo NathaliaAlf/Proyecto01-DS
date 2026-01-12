@@ -1,6 +1,7 @@
 import { saveUserIfNotExists } from "@/services/userService";
-import { deleteItem, getItem, saveItem } from "@/utils/storage";
+import { getItem, saveItem } from "@/utils/storage";
 import * as AuthSession from "expo-auth-session";
+import * as SecureStore from "expo-secure-store";
 import * as WebBrowser from "expo-web-browser";
 import { jwtDecode } from "jwt-decode";
 import React, { createContext, useContext, useEffect, useState } from "react";
@@ -10,19 +11,28 @@ WebBrowser.maybeCompleteAuthSession();
 const AUTH0_DOMAIN = process.env.EXPO_PUBLIC_AUTH0_DOMAIN!;
 const AUTH0_CLIENT_ID = process.env.EXPO_PUBLIC_AUTH0_CLIENT_ID!;
 
-type UserProfile = {
+export type Auth0Profile = {
   sub: string;
   name?: string;
   email?: string;
   picture?: string;
 };
 
+export type AppUser = {
+  uid: string;
+  name: string | null;
+  email: string | null;
+  photoURL: string | null;
+};
+
+
 type AuthContextType = {
-  user: UserProfile | null;
+  user: AppUser | null;
   login: () => Promise<void>;
   logout: () => Promise<void>;
   loading: boolean;
 };
+
 
 const AuthContext = createContext<AuthContextType | undefined>(undefined);
 
@@ -32,12 +42,14 @@ const discovery = {
 };
 
 export function AuthProvider({ children }: { children: React.ReactNode }) {
-  const [user, setUser] = useState<UserProfile | null>(null);
+  const [user, setUser] = useState<AppUser | null>(null);
   const [loading, setLoading] = useState(true);
 
-  const redirectUri = AuthSession.makeRedirectUri({
-    scheme: "devwebmob", 
-  });
+  const redirectUri = AuthSession.makeRedirectUri();
+
+  console.log("REDIRECT URI:", redirectUri);
+
+  console.log("REDIRECT URI:", redirectUri);
 
   const [request, response, promptAsync] = AuthSession.useAuthRequest(
     {
@@ -80,8 +92,11 @@ export function AuthProvider({ children }: { children: React.ReactNode }) {
 
         await saveItem("authTokens", JSON.stringify(storedTokens));
 
-        const profile = jwtDecode<UserProfile>(tokenResult.idToken!);
-        setUser(profile);
+        const auth0Profile = jwtDecode<Auth0Profile>(tokenResult.idToken!);
+        const firebaseUser = await saveUserIfNotExists(auth0Profile);
+        setUser(firebaseUser);
+
+
       } catch (e) {
         console.error("Auth error:", e);
         setUser(null);
@@ -93,7 +108,7 @@ export function AuthProvider({ children }: { children: React.ReactNode }) {
     exchangeToken();
   }, [response]);
 
-  
+
   useEffect(() => {
     const restoreSession = async () => {
       try {
@@ -105,10 +120,11 @@ export function AuthProvider({ children }: { children: React.ReactNode }) {
             idToken: string;
           } = JSON.parse(stored);
 
-          const profile = jwtDecode<UserProfile>(tokens.idToken);
+          const auth0Profile = jwtDecode<Auth0Profile>(tokens.idToken);
+          const firebaseUser = await saveUserIfNotExists(auth0Profile);
+          setUser(firebaseUser);
 
-          setUser(profile);
-          await saveUserIfNotExists(profile);
+
         }
       } catch {
         setUser(null);
@@ -122,21 +138,30 @@ export function AuthProvider({ children }: { children: React.ReactNode }) {
 
   /* ---------- ACTIONS ---------- */
   const login = async () => {
-    if (!request) return; // ✅ prevent early call
+    if (!request) return;
     await promptAsync();
   };
 
   const logout = async () => {
     setUser(null);
-    await deleteItem("authTokens");
+    await SecureStore.deleteItemAsync("authTokens");
+    setLoading(false);
   };
 
-  /* ---------- DEBUG ---------- */
+
   useEffect(() => {
     if (user) {
       console.log("Logged in user:", user.name);
     }
   }, [user]);
+
+
+  useEffect(() => {
+    if (__DEV__) {
+      // @ts-ignore
+      global.logout = logout;
+    }
+  }, []);
 
   return (
     <AuthContext.Provider value={{ user, loading, login, logout }}>
@@ -144,8 +169,6 @@ export function AuthProvider({ children }: { children: React.ReactNode }) {
     </AuthContext.Provider>
   );
 }
-
-/* ================= HOOK ================= */
 
 export function useAuth() {
   const context = useContext(AuthContext);

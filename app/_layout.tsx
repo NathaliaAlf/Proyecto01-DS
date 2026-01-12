@@ -1,9 +1,10 @@
 import FontAwesome from "@expo/vector-icons/FontAwesome";
 import { DarkTheme, DefaultTheme, ThemeProvider } from "@react-navigation/native";
 import { useFonts } from "expo-font";
-import { Redirect, Stack } from "expo-router";
+import { Stack, router, useRootNavigationState, useSegments } from "expo-router";
 import * as SplashScreen from "expo-splash-screen";
 import { useEffect } from "react";
+import { ActivityIndicator, View } from "react-native";
 import "react-native-reanimated";
 
 import { useColorScheme } from "@/components/useColorScheme";
@@ -45,33 +46,44 @@ export default function RootLayout() {
 function RootLayoutNav() {
   const colorScheme = useColorScheme();
   const { user, loading } = useAuth();
+  const segments = useSegments();
+  const navigationState = useRootNavigationState();
 
-  if (loading) return null;
+  useEffect(() => {
+    if (loading || !navigationState?.key) return;
+
+    const inAuthGroup = segments[0] === '(auth)';
+    
+    if (!user && !inAuthGroup) {
+      // redirect to auth if not signed in
+      router.replace('/(auth)/login');
+    } else if (user && inAuthGroup) {
+      // redirect to tabs if signed in
+      router.replace('/(tabs)');
+    }
+  }, [user, loading, segments, navigationState?.key]);
+
+  if (loading || !navigationState?.key) {
+    return (
+      <View style={{ flex: 1, justifyContent: 'center', alignItems: 'center' }}>
+        <ActivityIndicator size="large" />
+      </View>
+    );
+  }
 
   return (
     <ThemeProvider value={colorScheme === "dark" ? DarkTheme : DefaultTheme}>
-      {!user ? (
-        <>
-          <Stack screenOptions={{ headerShown: false }}>
-            <Stack.Screen name="(auth)" />
-          </Stack>
-
-        </>
-      ) : (
-        <>
-          <Redirect href="/(tabs)" />
-
-          <Stack screenOptions={{ headerShown: true }}>
-            <Stack.Screen name="(tabs)" />
-            <Stack.Screen
-              name="modal"
-              options={{ presentation: "modal" }}
-            />
-          </Stack>
-        </>
-      )}
+      <Stack screenOptions={{ headerShown: false }}>
+        <Stack.Screen name="(auth)" />
+        <Stack.Screen name="(tabs)" />
+        <Stack.Screen
+          name="modal"
+          options={{ 
+            presentation: "modal",
+            headerShown: true 
+          }}
+        />
+      </Stack>
     </ThemeProvider>
   );
 }
-
-

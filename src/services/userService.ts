@@ -1,32 +1,32 @@
+import type { AppUser, Auth0Profile } from "@/context/AuthContext"; // adjust path if needed
 import { db } from "@/lib/firebase";
-import { doc, getDoc, serverTimestamp, setDoc } from "firebase/firestore";
+import { doc, getDoc, setDoc } from "firebase/firestore";
 
-type UserProfile = {
-  sub: string;
-  name?: string;
-  email?: string;
-  picture?: string;
-};
+export async function saveUserIfNotExists(
+  profile: Auth0Profile
+): Promise<AppUser> {
+  const ref = doc(db, "users", profile.sub);
+  const snap = await getDoc(ref);
 
-export async function saveUserIfNotExists(user: UserProfile) {
-  console.log("Saving user to Firestore:", user.sub);
-
-  const userRef = doc(db, "users", user.sub);
-  const snap = await getDoc(userRef);
+  const userData: AppUser = {
+    uid: profile.sub,
+    name: profile.name ?? null,
+    email: profile.email ?? null,
+    photoURL: profile.picture ?? null,
+  };
 
   if (!snap.exists()) {
-    console.log("User does NOT exist → creating");
-
-    await setDoc(userRef, {
-      name: user.name ?? "",
-      email: user.email ?? "",
-      picture: user.picture ?? "",
-      createdAt: serverTimestamp(),
-    });
-
-    console.log("User saved");
-  } else {
-    console.log("User already exists");
+    await setDoc(ref, userData);
+    return userData;
   }
-}
 
+  // Merge Firestore data safely
+  const existing = snap.data();
+
+  return {
+    uid: existing.uid,
+    name: existing.name ?? null,
+    email: existing.email ?? null,
+    photoURL: existing.photoURL ?? null,
+  };
+}
