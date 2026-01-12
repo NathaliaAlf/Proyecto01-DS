@@ -212,5 +212,86 @@ export const gbifService = {
     const response = await fetch(`${BASE_URL}/species/search?q=${encodeURIComponent(query)}&limit=10`);
     if (!response.ok) throw new Error('Error connecting to GBIF');
     return await response.json();
-  }
+  },
+  
+  getMonthlyOccurrences: async (speciesKey: number, countryCode?: string, stateProvince?: string) => {
+    let url = `${BASE_URL}/occurrence/search?taxonKey=${speciesKey}&facet=month&limit=0`;
+    if (countryCode) {
+      url += `&country=${countryCode}`;
+    }
+    if (stateProvince) {
+      url += `&stateProvince=${encodeURIComponent(stateProvince)}`;
+    }
+    const response = await fetch(url);
+    if (!response.ok) throw new Error('Error connecting to GBIF');
+    return await response.json();
+  },
+
+  getVerifiedLocations: async (speciesKey: number) => {
+    const url = `${BASE_URL}/occurrence/search?taxonKey=${speciesKey}&hasGeospatialIssue=false&hasCoordinate=true&limit=300`;
+    const response = await fetch(url);
+    if (!response.ok) throw new Error('Error fetching verified occurrences');
+    const data = await response.json();
+
+    const countries = new Map<string, { iso2: string, title: string }>();
+    const regionsByCountry = new Map<string, Set<string>>();
+
+    for (const occ of data.results) {
+      if (occ.countryCode && occ.country) {
+        if (!countries.has(occ.countryCode)) {
+          countries.set(occ.countryCode, { iso2: occ.countryCode, title: occ.country });
+        }
+      }
+
+      if (occ.countryCode && occ.stateProvince) {
+        if (!regionsByCountry.has(occ.countryCode)) {
+          regionsByCountry.set(occ.countryCode, new Set());
+        }
+        regionsByCountry.get(occ.countryCode)!.add(occ.stateProvince);
+      }
+    }
+
+    return {
+      countries: Array.from(countries.values()),
+      regionsByCountry: regionsByCountry,
+    };
+  },
+
+  getTaxonomicHierarchy: async (speciesKey: number) => {
+    // 1. Get the parent hierarchy
+    const parentsResponse = await fetch(`${BASE_URL}/species/${speciesKey}/parents`);
+    if (!parentsResponse.ok) throw new Error('Error fetching taxonomic parents');
+    const parents = await parentsResponse.json();
+
+    // 2. Get the species' own data
+    const speciesResponse = await fetch(`${BASE_URL}/species/${speciesKey}`);
+    if (!speciesResponse.ok) throw new Error('Error fetching species details');
+    const speciesData = await speciesResponse.json();
+
+    // 3. Combine and return, filtering out unranked items if any
+    const hierarchy = [...parents, speciesData].filter(t => t.rank && t.canonicalName);
+    return hierarchy;
+  },
+
+  getSpeciesImages: async (speciesKey: number, limit: number = 5): Promise<string[]> => {
+    const url = `${BASE_URL}/occurrence/search?taxonKey=${speciesKey}&mediaType=StillImage&limit=${limit}`;
+    const response = await fetch(url);
+    if (!response.ok) throw new Error('Error fetching species images');
+    const data = await response.json();
+
+    const images: string[] = [];
+    if (data.results) {
+      for (const occ of data.results) {
+        if (occ.media && occ.media.length > 0) {
+          for (const mediaItem of occ.media) {
+            if (mediaItem.type === 'StillImage' && mediaItem.identifier) {
+              images.push(mediaItem.identifier);
+            }
+          }
+        }
+      }
+    }
+    // Return only unique images
+    return [...new Set(images)];
+  },
 };

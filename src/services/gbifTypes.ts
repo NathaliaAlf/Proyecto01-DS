@@ -12,3 +12,18 @@ export interface GBIFSearchResponse {
   results: GBIFSpecies[];
 }
 
+export interface GBIFCountry {
+  iso2: string;
+  title: string;
+}
+
+export interface GBIFRegion {
+  name: string;
+  count: number;
+}
+
+export interface Taxon {
+  key: number;
+  rank: string;
+  canonicalName: string;
+}
