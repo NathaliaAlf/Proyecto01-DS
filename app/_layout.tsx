@@ -55,11 +55,9 @@ function RootLayoutNav() {
     const inAuthGroup = segments[0] === '(auth)';
     
     if (!user && !inAuthGroup) {
-      // redirect to auth if not signed in
       router.replace('/(auth)/login');
     } else if (user && inAuthGroup) {
-      // redirect to tabs if signed in
-      router.replace('/(tabs)');
+      router.replace('/(tabs)/home');
     }
   }, [user, loading, segments, navigationState?.key]);
 
