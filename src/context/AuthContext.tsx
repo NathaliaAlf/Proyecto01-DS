@@ -45,9 +45,11 @@ export function AuthProvider({ children }: { children: React.ReactNode }) {
   const [user, setUser] = useState<AppUser | null>(null);
   const [loading, setLoading] = useState(true);
 
-  const redirectUri = AuthSession.makeRedirectUri({
-    scheme: "devwebmob", 
-  });
+  const redirectUri = AuthSession.makeRedirectUri();
+
+  console.log("REDIRECT URI:", redirectUri);
+
+  console.log("REDIRECT URI:", redirectUri);
 
   const [request, response, promptAsync] = AuthSession.useAuthRequest(
     {

@@ -294,4 +294,15 @@ export const gbifService = {
     // Return only unique images
     return [...new Set(images)];
   },
+
+  getOccurrenceCoordinates: async (speciesKey: number, limit: number = 200) => {
+    const url = `${BASE_URL}/occurrence/search?taxonKey=${speciesKey}&hasCoordinate=true&hasGeospatialIssue=false&limit=${limit}`;
+    const response = await fetch(url);
+    if (!response.ok) throw new Error('Error fetching occurrence coordinates');
+    const data = await response.json();
+    return data.results.map((occ: any) => ({
+      latitude: occ.decimalLatitude,
+      longitude: occ.decimalLongitude,
+    })).filter((coord: any) => coord.latitude && coord.longitude);
+  },
 };

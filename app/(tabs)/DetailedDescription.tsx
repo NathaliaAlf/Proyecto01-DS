@@ -5,32 +5,39 @@ import { Pressable, ScrollView, StyleSheet, Text, View, TouchableOpacity, Activi
 import { gbifService } from '@/services/gbifService';
 import { GBIFCountry, Taxon } from '@/services/gbifTypes';
 
+type ActiveTab = 'overview' | 'seasonality';
+
 export default function DetailedDescriptionScreen() {
   const { speciesKey, scientificName } = useLocalSearchParams();
   const router = useRouter();
+  
+  // State for the active tab
+  const [activeTab, setActiveTab] = useState<ActiveTab>('overview');
+
+  // Data states
   const [monthlyData, setMonthlyData] = useState<number[]>(new Array(12).fill(0));
-  const [loading, setLoading] = useState(false);
+  const [taxonomy, setTaxonomy] = useState<Taxon[]>([]);
+  const [images, setImages] = useState<string[]>([]);
+  const [countries, setCountries] = useState<GBIFCountry[]>([]);
+  const [regionsByCountry, setRegionsByCountry] = useState<Map<string, Set<string>>>(new Map());
+
+  // Loading states
+  const [loadingChart, setLoadingChart] = useState(true);
+  const [loadingTaxonomy, setLoadingTaxonomy] = useState(true);
+  const [loadingImages, setLoadingImages] = useState(true);
+  const [loadingLocations, setLoadingLocations] = useState(true);
+  
+  // Error and interaction states
   const [error, setError] = useState<string | null>(null);
   const [selectedMonth, setSelectedMonth] = useState<number | null>(null);
   
-  // Taxonomy state
-  const [taxonomy, setTaxonomy] = useState<Taxon[]>([]);
-  const [loadingTaxonomy, setLoadingTaxonomy] = useState(true);
-
-  // Image gallery state
-  const [images, setImages] = useState<string[]>([]);
-  const [loadingImages, setLoadingImages] = useState(true);
-
   // Filter states
-  const [countries, setCountries] = useState<GBIFCountry[]>([]);
-  const [regionsByCountry, setRegionsByCountry] = useState<Map<string, Set<string>>>(new Map());
   const [selectedCountry, setSelectedCountry] = useState<GBIFCountry | null>(null);
   const [selectedRegion, setSelectedRegion] = useState<string | null>(null);
   
-  // UI states for dropdowns
+  // Modal UI states
   const [showCountryModal, setShowCountryModal] = useState(false);
   const [showRegionModal, setShowRegionModal] = useState(false);
-  const [loadingLocations, setLoadingLocations] = useState(true);
   const [countrySearch, setCountrySearch] = useState('');
   const [regionSearch, setRegionSearch] = useState('');
 
@@ -38,10 +45,7 @@ export default function DetailedDescriptionScreen() {
     const key = Array.isArray(speciesKey) ? speciesKey[0] : speciesKey;
     if (key) {
       const numericKey = Number(key);
-      loadVerifiedLocations(numericKey);
-      loadTaxonomy(numericKey);
-      loadImages(numericKey);
-      fetchSeasonalityData(numericKey);
+      loadInitialData(numericKey);
     }
   }, [speciesKey]);
 
@@ -52,6 +56,13 @@ export default function DetailedDescriptionScreen() {
       fetchSeasonalityData(Number(key));
     }
   }, [selectedCountry, selectedRegion]);
+
+  const loadInitialData = (key: number) => {
+    loadVerifiedLocations(key);
+    loadTaxonomy(key);
+    loadImages(key);
+    fetchSeasonalityData(key);
+  };
 
   const loadVerifiedLocations = async (key: number) => {
     setLoadingLocations(true);
@@ -83,7 +94,7 @@ export default function DetailedDescriptionScreen() {
   const loadImages = async (key: number) => {
     setLoadingImages(true);
     try {
-      const imageList = await gbifService.getSpeciesImages(key, 3); // Fetch up to 3 images
+      const imageList = await gbifService.getSpeciesImages(key, 3);
       setImages(imageList);
     } catch (err) {
       console.error("Error loading images", err);
@@ -93,7 +104,7 @@ export default function DetailedDescriptionScreen() {
   };
 
   const fetchSeasonalityData = async (key: number) => {
-    setLoading(true);
+    setLoadingChart(true);
     setError(null);
     try {
       const countryIso = selectedCountry?.iso2;
@@ -115,7 +126,7 @@ export default function DetailedDescriptionScreen() {
       setError("Error al cargar datos de estacionalidad");
       setMonthlyData(new Array(12).fill(0));
     } finally {
-      setLoading(false);
+      setLoadingChart(false);
     }
   };
 
@@ -136,257 +147,169 @@ export default function DetailedDescriptionScreen() {
   const maxCount = Math.max(...monthlyData, 1);
   const monthNames = ['Ene', 'Feb', 'Mar', 'Abr', 'May', 'Jun', 'Jul', 'Ago', 'Sep', 'Oct', 'Nov', 'Dic'];
 
+  // --- Render Functions for each Tab ---
+
+  const renderOverview = () => (
+    <ScrollView>
+      <View style={styles.section}>
+        {loadingImages ? (
+          <ActivityIndicator style={{height: 200}} color="#1A4508" />
+        ) : (
+          <View style={styles.galleryContainer}>
+            <View style={styles.galleryImageSmall}>
+              {images[1] && <Image source={{ uri: images[1] }} style={styles.image} />}
+            </View>
+            <View style={styles.galleryImageLarge}>
+              {images[0] ? (
+                <Image source={{ uri: images[0] }} style={styles.image} />
+              ) : (
+                <View style={styles.noImage}>
+                  <Text style={styles.noImageText}>No Image Available</Text>
+                </View>
+              )}
+            </View>
+            <View style={styles.galleryImageSmall}>
+              {images[2] && <Image source={{ uri: images[2] }} style={styles.image} />}
+            </View>
+          </View>
+        )}
+
+        {loadingTaxonomy ? (
+          <ActivityIndicator color="#1A4508" style={{marginTop: 20}}/>
+        ) : (
+          <View style={styles.taxonomySection}>
+            <Text style={styles.sectionTitle}>Clasificación Taxonómica</Text>
+            {taxonomy.map((taxon, index) => (
+              <View key={index} style={[styles.taxonomyItem, { marginLeft: index * 10 }]}>
+                <Text style={styles.taxonomyRank}>{taxon.rank}</Text>
+                <Text style={styles.taxonomyName}>{taxon.canonicalName}</Text>
+              </View>
+            ))}
+          </View>
+        )}
+      </View>
+    </ScrollView>
+  );
+
+  const renderSeasonality = () => (
+    <ScrollView>
+      <View style={styles.section}>
+        <Text style={styles.sectionTitle}>Seasonality</Text>
+        <View style={styles.filterSection}>
+          <Text style={styles.filterLabel}>País:</Text>
+          <View style={styles.selectorContainer}>
+            {selectedCountry && (
+              <TouchableOpacity style={styles.clearButton} onPress={() => { setSelectedCountry(null); setSelectedRegion(null); }}>
+                <FontAwesome name="times-circle" size={20} color="#999" />
+              </TouchableOpacity>
+            )}
+            <TouchableOpacity style={styles.dropdownSelector} onPress={() => setShowCountryModal(true)}>
+              <Text style={selectedCountry ? styles.dropdownText : styles.placeholderText} numberOfLines={1}>
+                {loadingLocations ? "Cargando ubicaciones..." : (selectedCountry ? selectedCountry.title : "Todos los países (Global)")}
+              </Text>
+              <FontAwesome name="chevron-down" size={14} color="#666" />
+            </TouchableOpacity>
+          </View>
+          <Text style={styles.filterLabel}>Región (Opcional):</Text>
+          <View style={styles.selectorContainer}>
+            {selectedRegion && (
+              <TouchableOpacity style={styles.clearButton} onPress={() => setSelectedRegion(null)}>
+                <FontAwesome name="times-circle" size={20} color="#999" />
+              </TouchableOpacity>
+            )}
+            <TouchableOpacity style={[styles.dropdownSelector, !selectedCountry && styles.disabledSelector]} onPress={() => selectedCountry && setShowRegionModal(true)} disabled={!selectedCountry}>
+              <Text style={selectedRegion ? styles.dropdownText : styles.placeholderText} numberOfLines={1}>
+                {selectedRegion || "Todas las regiones"}
+              </Text>
+              <FontAwesome name="chevron-down" size={14} color="#666" />
+            </TouchableOpacity>
+          </View>
+        </View>
+        {loadingChart ? (
+          <ActivityIndicator size="large" color="#1A4508" style={{ marginVertical: 20 }} />
+        ) : error ? (
+          <View style={styles.errorContainer}><Text style={styles.errorText}>{error}</Text></View>
+        ) : (
+          <View style={styles.chartContainer}>
+            <View style={styles.chartGrid}>
+              {monthlyData.map((count, index) => (
+                <Pressable key={index} style={styles.barContainer} onHoverIn={() => setSelectedMonth(index)} onHoverOut={() => setSelectedMonth(null)} onPress={() => setSelectedMonth(index === selectedMonth ? null : index)}>
+                  {selectedMonth === index && <View style={styles.tooltip}><Text style={styles.tooltipText}>{count}</Text></View>}
+                  <View style={[styles.bar, { height: `${(count / maxCount) * 100}%`, backgroundColor: selectedMonth === index ? '#1A4508' : '#3D7716', opacity: selectedMonth === index ? 1 : 0.7 }]} />
+                  <Text style={[styles.monthLabel, selectedMonth === index && styles.monthLabelSelected]}>{monthNames[index]}</Text>
+                </Pressable>
+              ))}
+            </View>
+          </View>
+        )}
+      </View>
+    </ScrollView>
+  );
+
   return (
     <View style={styles.container}>
-      <ScrollView style={styles.content}>
-        {/* Pantalla 1: Detalle de la Especie y Taxonomía */}
-        <View style={styles.section}>
-          <View style={styles.titleContainer}>
-             <TouchableOpacity onPress={() => router.back()}>
-               <FontAwesome name="arrow-left" size={20} color="#1A4508" />
-             </TouchableOpacity>
-             <Text style={styles.scientificName}>{scientificName}</Text>
-          </View>
+      <View style={styles.header}>
+        <TouchableOpacity onPress={() => router.back()}>
+          <FontAwesome name="arrow-left" size={20} color="#1A4508" />
+        </TouchableOpacity>
+        <Text style={styles.scientificName}>{scientificName}</Text>
+      </View>
 
-          {loadingImages ? (
-            <ActivityIndicator style={{height: 200}} color="#1A4508" />
-          ) : (
-            <View style={styles.galleryContainer}>
-              <View style={styles.galleryImageSmall}>
-                {images[1] && <Image source={{ uri: images[1] }} style={styles.image} />}
-              </View>
-              <View style={styles.galleryImageLarge}>
-                {images[0] ? (
-                  <Image source={{ uri: images[0] }} style={styles.image} />
-                ) : (
-                  <View style={styles.noImage}>
-                    <Text style={styles.noImageText}>No Image Available</Text>
-                  </View>
-                )}
-              </View>
-              <View style={styles.galleryImageSmall}>
-                {images[2] && <Image source={{ uri: images[2] }} style={styles.image} />}
-              </View>
-            </View>
-          )}
+      <View style={styles.tabBar}>
+        <TouchableOpacity style={[styles.tabItem, activeTab === 'overview' && styles.tabItemActive]} onPress={() => setActiveTab('overview')}>
+          <Text style={[styles.tabText, activeTab === 'overview' && styles.tabTextActive]}>Resumen</Text>
+        </TouchableOpacity>
+        <TouchableOpacity style={[styles.tabItem, activeTab === 'seasonality' && styles.tabItemActive]} onPress={() => setActiveTab('seasonality')}>
+          <Text style={[styles.tabText, activeTab === 'seasonality' && styles.tabTextActive]}>Estacionalidad</Text>
+        </TouchableOpacity>
+      </View>
 
-          {/* Taxonomy */}
-          {loadingTaxonomy ? (
-            <ActivityIndicator color="#1A4508" />
-          ) : (
-            <ScrollView horizontal showsHorizontalScrollIndicator={false} contentContainerStyle={styles.taxonomyContainer}>
-              {taxonomy.map((taxon, index) => (
-                <View key={index} style={styles.taxonomyItem}>
-                  <Text style={styles.taxonomyRank}>{taxon.rank}</Text>
-                  <Text style={styles.taxonomyName}>{taxon.canonicalName}</Text>
-                </View>
-              ))}
-            </ScrollView>
-          )}
-        </View>
+      <View style={styles.content}>
+        {activeTab === 'overview' && renderOverview()}
+        {activeTab === 'seasonality' && renderSeasonality()}
+      </View>
 
-        {/* Pantalla 2: Mapa de Distribución */}
-        <View style={styles.section}>
-           <Text style={styles.sectionTitle}>Distribution Map</Text>
-           <View style={styles.mapContainer}>
-              <Text>Map of Central America (Guatemala, Honduras, El Salvador, Nicaragua)</Text>
-              <View style={[styles.pin, {top: 50, left: 100}]} />
-              <View style={[styles.pin, {top: 80, left: 120}]} />
-              <View style={[styles.pin, {top: 60, left: 150}]} />
-              <View style={[styles.pin, {top: 90, left: 130}]} />
-           </View>
-        </View>
-
-        {/* Pantalla 3: Gráfico de Estacionalidad y Filtros */}
-        <View style={styles.section}>
-           <Text style={styles.sectionTitle}>Seasonality</Text>
-           
-           <View style={styles.filterSection}>
-              <Text style={styles.filterLabel}>País:</Text>
-              <View style={styles.selectorContainer}>
-                {selectedCountry && (
-                  <TouchableOpacity 
-                    style={styles.clearButton}
-                    onPress={() => {
-                      setSelectedCountry(null);
-                      setSelectedRegion(null);
-                    }}
-                  >
-                    <FontAwesome name="times-circle" size={20} color="#999" />
-                  </TouchableOpacity>
-                )}
-                <TouchableOpacity 
-                  style={styles.dropdownSelector}
-                  onPress={() => setShowCountryModal(true)}
-                >
-                  <Text style={selectedCountry ? styles.dropdownText : styles.placeholderText} numberOfLines={1}>
-                    {loadingLocations ? "Cargando ubicaciones..." : (selectedCountry ? selectedCountry.title : "Todos los países (Global)")}
-                  </Text>
-                  <FontAwesome name="chevron-down" size={14} color="#666" />
-                </TouchableOpacity>
-              </View>
-
-              <Text style={styles.filterLabel}>Región (Opcional):</Text>
-              <View style={styles.selectorContainer}>
-                {selectedRegion && (
-                  <TouchableOpacity 
-                    style={styles.clearButton}
-                    onPress={() => setSelectedRegion(null)}
-                  >
-                    <FontAwesome name="times-circle" size={20} color="#999" />
-                  </TouchableOpacity>
-                )}
-                <TouchableOpacity 
-                  style={[styles.dropdownSelector, !selectedCountry && styles.disabledSelector]}
-                  onPress={() => selectedCountry && setShowRegionModal(true)}
-                  disabled={!selectedCountry}
-                >
-                  <Text style={selectedRegion ? styles.dropdownText : styles.placeholderText} numberOfLines={1}>
-                    {selectedRegion || "Todas las regiones"}
-                  </Text>
-                  <FontAwesome name="chevron-down" size={14} color="#666" />
-                </TouchableOpacity>
-              </View>
-           </View>
-
-           {loading ? (
-             <ActivityIndicator size="large" color="#1A4508" style={{ marginVertical: 20 }} />
-           ) : error ? (
-             <View style={styles.errorContainer}>
-               <Text style={styles.errorText}>{error}</Text>
-             </View>
-           ) : (
-             <View style={styles.chartContainer}>
-                <View style={styles.chartGrid}>
-                   {monthlyData.map((count, index) => {
-                     const isSelected = selectedMonth === index;
-                     return (
-                       <Pressable 
-                         key={index} 
-                         style={styles.barContainer}
-                         onHoverIn={() => setSelectedMonth(index)}
-                         onHoverOut={() => setSelectedMonth(null)}
-                         onPress={() => setSelectedMonth(isSelected ? null : index)}
-                       >
-                         {isSelected && (
-                           <View style={styles.tooltip}>
-                             <Text style={styles.tooltipText}>{count}</Text>
-                           </View>
-                         )}
-                         <View 
-                           style={[
-                             styles.bar, 
-                             { 
-                               height: `${(count / maxCount) * 100}%`,
-                               backgroundColor: isSelected ? '#1A4508' : '#3D7716',
-                               opacity: isSelected ? 1 : 0.7
-                             }
-                           ]} 
-                         />
-                         <Text style={[
-                           styles.monthLabel,
-                           isSelected && styles.monthLabelSelected
-                         ]}>
-                           {monthNames[index]}
-                         </Text>
-                       </Pressable>
-                     );
-                   })}
-                </View>
-             </View>
-           )}
-        </View>
-        <View style={{height: 50}} />
-      </ScrollView>
-
-      {/* Country Selection Modal */}
-      <Modal
-        visible={showCountryModal}
-        animationType="slide"
-        transparent={true}
-        onRequestClose={() => setShowCountryModal(false)}
-      >
+      {/* --- Modals --- */}
+      <Modal visible={showCountryModal} animationType="slide" transparent={true} onRequestClose={() => setShowCountryModal(false)}>
         <View style={styles.modalOverlay}>
           <View style={styles.modalContent}>
             <View style={styles.modalHeader}>
               <Text style={styles.modalTitle}>Seleccionar País</Text>
-              <TouchableOpacity onPress={() => setShowCountryModal(false)}>
-                <FontAwesome name="close" size={24} color="#000" />
-              </TouchableOpacity>
+              <TouchableOpacity onPress={() => setShowCountryModal(false)}><FontAwesome name="close" size={24} color="#000" /></TouchableOpacity>
             </View>
-            <TextInput
-              style={styles.searchInput}
-              placeholder="Buscar país..."
-              value={countrySearch}
-              onChangeText={setCountrySearch}
-            />
+            <TextInput style={styles.searchInput} placeholder="Buscar país..." value={countrySearch} onChangeText={setCountrySearch} />
             <FlatList
               data={filteredCountries}
               keyExtractor={(item) => item.iso2}
               renderItem={({ item }) => (
-                <TouchableOpacity 
-                  style={styles.modalItem}
-                  onPress={() => {
-                    setSelectedCountry(item);
-                    setSelectedRegion(null); // Reset region when country changes
-                    setShowCountryModal(false);
-                  }}
-                >
+                <TouchableOpacity style={styles.modalItem} onPress={() => { setSelectedCountry(item); setSelectedRegion(null); setShowCountryModal(false); }}>
                   <Text style={styles.modalItemText}>{item.title}</Text>
-                  {selectedCountry?.iso2 === item.iso2 && (
-                    <FontAwesome name="check" size={16} color="#1A4508" />
-                  )}
+                  {selectedCountry?.iso2 === item.iso2 && <FontAwesome name="check" size={16} color="#1A4508" />}
                 </TouchableOpacity>
               )}
-              ListEmptyComponent={
-                <Text style={styles.emptyListText}>No hay países con registros verificados para esta especie.</Text>
-              }
+              ListEmptyComponent={<Text style={styles.emptyListText}>No hay países con registros verificados.</Text>}
             />
           </View>
         </View>
       </Modal>
-
-      {/* Region Selection Modal */}
-      <Modal
-        visible={showRegionModal}
-        animationType="slide"
-        transparent={true}
-        onRequestClose={() => setShowRegionModal(false)}
-      >
+      <Modal visible={showRegionModal} animationType="slide" transparent={true} onRequestClose={() => setShowRegionModal(false)}>
         <View style={styles.modalOverlay}>
           <View style={styles.modalContent}>
             <View style={styles.modalHeader}>
               <Text style={styles.modalTitle}>Seleccionar Región</Text>
-              <TouchableOpacity onPress={() => setShowRegionModal(false)}>
-                <FontAwesome name="close" size={24} color="#000" />
-              </TouchableOpacity>
+              <TouchableOpacity onPress={() => setShowRegionModal(false)}><FontAwesome name="close" size={24} color="#000" /></TouchableOpacity>
             </View>
-            <TextInput
-              style={styles.searchInput}
-              placeholder="Buscar región..."
-              value={regionSearch}
-              onChangeText={setRegionSearch}
-            />
+            <TextInput style={styles.searchInput} placeholder="Buscar región..." value={regionSearch} onChangeText={setRegionSearch} />
             <FlatList
               data={filteredRegions}
               keyExtractor={(item) => item}
               renderItem={({ item }) => (
-                <TouchableOpacity 
-                  style={styles.modalItem}
-                  onPress={() => {
-                    setSelectedRegion(item);
-                    setShowRegionModal(false);
-                  }}
-                >
+                <TouchableOpacity style={styles.modalItem} onPress={() => { setSelectedRegion(item); setShowRegionModal(false); }}>
                   <Text style={styles.modalItemText}>{item}</Text>
-                  {selectedRegion === item && (
-                    <FontAwesome name="check" size={16} color="#1A4508" />
-                  )}
+                  {selectedRegion === item && <FontAwesome name="check" size={16} color="#1A4508" />}
                 </TouchableOpacity>
               )}
-              ListEmptyComponent={
-                <Text style={styles.emptyListText}>No hay regiones con registros para este país y especie.</Text>
-              }
+              ListEmptyComponent={<Text style={styles.emptyListText}>No hay regiones para este país.</Text>}
             />
           </View>
         </View>
@@ -400,18 +323,12 @@ const styles = StyleSheet.create({
     flex: 1,
     backgroundColor: '#fff',
   },
-  content: {
-    flex: 1,
-  },
-  section: {
-    padding: 20,
-    borderBottomWidth: 1,
-    borderBottomColor: '#eee',
-  },
-  titleContainer: {
+  header: {
     flexDirection: 'row',
     alignItems: 'center',
-    marginBottom: 20,
+    paddingHorizontal: 20,
+    paddingTop: 20,
+    paddingBottom: 10,
   },
   scientificName: {
     fontSize: 18,
@@ -419,6 +336,35 @@ const styles = StyleSheet.create({
     color: '#1A4508',
     marginLeft: 10,
     fontStyle: 'italic',
+  },
+  tabBar: {
+    flexDirection: 'row',
+    justifyContent: 'space-around',
+    borderBottomWidth: 1,
+    borderBottomColor: '#eee',
+  },
+  tabItem: {
+    paddingVertical: 15,
+    paddingHorizontal: 10,
+    borderBottomWidth: 2,
+    borderBottomColor: 'transparent',
+  },
+  tabItemActive: {
+    borderBottomColor: '#1A4508',
+  },
+  tabText: {
+    fontSize: 16,
+    color: '#666',
+  },
+  tabTextActive: {
+    color: '#1A4508',
+    fontWeight: 'bold',
+  },
+  content: {
+    flex: 1,
+  },
+  section: {
+    padding: 20,
   },
   galleryContainer: {
     flexDirection: 'row',
@@ -455,15 +401,13 @@ const styles = StyleSheet.create({
     color: '#999',
     fontStyle: 'italic',
   },
-  taxonomyContainer: {
-    flexDirection: 'row',
-    paddingVertical: 10,
+  taxonomySection: {
+    marginTop: 10,
   },
   taxonomyItem: {
-    alignItems: 'center',
-    paddingHorizontal: 10,
-    borderRightWidth: 1,
-    borderRightColor: '#eee',
+    paddingVertical: 8,
+    borderBottomWidth: 1,
+    borderBottomColor: '#f5f5f5',
   },
   taxonomyRank: {
     fontSize: 10,
@@ -473,7 +417,8 @@ const styles = StyleSheet.create({
   taxonomyName: {
     color: '#1A4508',
     fontWeight: 'bold',
-    fontSize: 14,
+    fontSize: 16,
+    fontStyle: 'italic',
   },
   sectionTitle: {
     fontSize: 18,
@@ -481,38 +426,21 @@ const styles = StyleSheet.create({
     marginBottom: 15,
     color: '#1A4508',
   },
-  mapContainer: {
-    height: 200,
-    backgroundColor: '#e0e0e0',
-    borderRadius: 10,
-    justifyContent: 'center',
-    alignItems: 'center',
-    position: 'relative',
-  },
-  pin: {
-    position: 'absolute',
-    width: 15,
-    height: 15,
-    backgroundColor: '#3D7716',
-    borderRadius: 7.5,
-    borderWidth: 2,
-    borderColor: '#1B1C1A',
-  },
   chartContainer: {
-    height: 220, // Increased height for tooltips
+    height: 220,
     backgroundColor: '#fff',
     marginBottom: 20,
     borderWidth: 1,
     borderColor: '#eee',
     padding: 10,
-    paddingTop: 30, // Space for tooltips
+    paddingTop: 30,
   },
   chartGrid: {
     flex: 1,
     flexDirection: 'row',
     alignItems: 'flex-end',
     justifyContent: 'space-between',
-    paddingBottom: 20, // Space for labels
+    paddingBottom: 20,
   },
   barContainer: {
     flex: 1,
@@ -525,7 +453,7 @@ const styles = StyleSheet.create({
   bar: {
     width: '100%',
     borderRadius: 2,
-    minHeight: 2, // Ensure even 0 values have a tiny line
+    minHeight: 2,
   },
   monthLabel: {
     fontSize: 9,
