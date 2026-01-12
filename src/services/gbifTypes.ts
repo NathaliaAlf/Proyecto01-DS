@@ -6,9 +6,17 @@ export interface GBIFSpecies {
   family?: string;
   genus?: string;
   rank?: string;
+  media?: GBIFMedia[];
 }
 
 export interface GBIFSearchResponse {
   results: GBIFSpecies[];
+}
+
+export interface GBIFMedia {
+  type: string;
+  format: string;
+  identifier: string; // Aquí es donde viene la URL de la imagen
+  license?: string;
 }
 

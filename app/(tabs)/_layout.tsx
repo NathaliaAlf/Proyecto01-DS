@@ -1,7 +1,9 @@
+import FilterOverlay from '@/components/FilterOverlay';
 import { useClientOnlyValue } from '@/components/useClientOnlyValue';
 import { useColorScheme } from '@/components/useColorScheme';
 import Colors from '@/constants/Colors';
 import { useAuth } from '@/context/AuthContext';
+import { useFilters } from '@/context/FilterContext';
 import { FontAwesome, FontAwesome5, Ionicons, MaterialIcons } from '@expo/vector-icons';
 import { Tabs, useRouter } from 'expo-router';
 import React, { useRef, useState } from 'react';
@@ -17,6 +19,7 @@ import {
 } from 'react-native';
 
 export default function TabLayout() {
+  const { filters, setIsFilterVisible } = useFilters();
   const colorScheme = useColorScheme() ?? 'light';
   const [searchQuery, setSearchQuery] = useState('');
   const [isSearching, setIsSearching] = useState(false);
@@ -35,22 +38,29 @@ export default function TabLayout() {
     });
   };
 
-  const handleHeaderSearch = async () => {
-    if (!searchQuery.trim()) return;
-    
-    setIsSearching(true);
-    try {
-      router.push({
-        pathname: '/(tabs)/especies',
-        params: { search: searchQuery }
-      });
-    } catch (error) {
-      console.error('Search error:', error);
-    } finally {
-      setIsSearching(false);
-      searchInputRef.current?.blur();
-    }
-  };
+const handleHeaderSearch = async () => {
+  const cleanQuery = searchQuery.trim();
+  if (!cleanQuery) return; 
+
+  setIsSearching(true);
+  
+
+  searchInputRef.current?.blur();
+
+  try {
+    router.push({
+      pathname: '/(tabs)/especies',
+      params: { 
+        search: cleanQuery,
+        ...filters 
+      }
+    });
+  } catch (error) {
+    console.error('Search error:', error);
+  } finally {
+    setTimeout(() => setIsSearching(false), 500);
+  }
+};
 
   const handleClearSearch = () => {
     setSearchQuery('');
@@ -58,6 +68,7 @@ export default function TabLayout() {
   };
 
   return (
+    <>
     <Tabs
       screenOptions={{
 
@@ -70,10 +81,13 @@ export default function TabLayout() {
         headerTitle: () => (
           <View style={[styles.center_header_container, { width: availableWidth }]}>
             <TouchableOpacity 
-              onPress={() => console.log('Filter pressed')} 
-              style={styles.filterButton}
+              onPress={() => setIsFilterVisible(true)}
+               style={styles.filterButton}
             >
-              <FontAwesome5 name="filter" style={styles.filterIcon} />
+              <FontAwesome5 name="filter" style={[
+                    styles.filterIcon, 
+                    Object.keys(filters).length > 0 && { color: Colors.light.selected }
+                  ]}  />
             </TouchableOpacity>
 
             <View style={[
@@ -95,7 +109,7 @@ export default function TabLayout() {
                 selectionColor={Colors.light.selected}
                 cursorColor={Colors.light.selected}
                 underlineColorAndroid="transparent"
-                blurOnSubmit={false}
+                blurOnSubmit={true}
                 textAlignVertical="center"
               />
               
@@ -173,7 +187,7 @@ export default function TabLayout() {
           </View>
         ),
         headerRightContainerStyle: {
-          width: 70, // Ancho fijo para el lado derecho
+          width: 70, 
         },
       }}
     >
@@ -197,6 +211,10 @@ export default function TabLayout() {
         }}
       />
     </Tabs>
+
+
+      <FilterOverlay onApply={handleHeaderSearch} />
+    </>
   );
 }
 
@@ -218,6 +236,7 @@ const styles = StyleSheet.create({
     height: 40,
     marginHorizontal: 8,
     minWidth: 100,
+     position: 'relative',
   },
   searchContainerFocused: {
     backgroundColor: Colors.light.background,
@@ -259,7 +278,9 @@ const styles = StyleSheet.create({
     marginLeft: 4,
   },
   searchLoader: {
-    marginLeft: 8,
+    position: 'absolute', 
+    right: 40,            
+    zIndex: 10, 
   },
   headerLeft: {
     justifyContent: 'center',

@@ -10,6 +10,7 @@ import "react-native-reanimated";
 import { useColorScheme } from "@/components/useColorScheme";
 import { AuthProvider, useAuth } from "@/context/AuthContext";
 
+import { FilterProvider } from '@/context/FilterContext';
 export {
   // Catch any errors thrown by the Layout component.
   ErrorBoundary
@@ -38,7 +39,9 @@ export default function RootLayout() {
 
   return (
     <AuthProvider>
-      <RootLayoutNav />
+      <FilterProvider> 
+        <RootLayoutNav />
+      </FilterProvider>
     </AuthProvider>
   );
 }
@@ -55,10 +58,8 @@ function RootLayoutNav() {
     const inAuthGroup = segments[0] === '(auth)';
     
     if (!user && !inAuthGroup) {
-      // redirect to auth if not signed in
       router.replace('/(auth)/login');
     } else if (user && inAuthGroup) {
-      // redirect to tabs if signed in
       router.replace('/(tabs)');
     }
   }, [user, loading, segments, navigationState?.key]);
@@ -78,10 +79,7 @@ function RootLayoutNav() {
         <Stack.Screen name="(tabs)" />
         <Stack.Screen
           name="modal"
-          options={{ 
-            presentation: "modal",
-            headerShown: true 
-          }}
+          options={{ presentation: "modal", headerShown: true }}
         />
       </Stack>
     </ThemeProvider>
