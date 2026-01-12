@@ -35,7 +35,7 @@ export default function TabLayout() {
     setIsSearching(true);
     try {
       router.push({
-        pathname: '/(tabs)/especies',
+        pathname: '/especies',
         params: { search: searchQuery }
       });
     } catch (error) {
