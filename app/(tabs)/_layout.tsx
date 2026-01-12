@@ -48,7 +48,7 @@ export default function TabLayout() {
 
         try {
             router.push({
-                pathname: '/especies',
+                pathname: '/(tabs)/especies',
                 params: {
                     search: cleanQuery,
                     ...filters
@@ -208,6 +208,7 @@ export default function TabLayout() {
                         tabBarIcon: ({ color, focused }) => (
                             <Ionicons name={focused ? 'leaf' : 'leaf-outline'} color={color} size={24} />
                         ),
+                        headerShown: true,
                     }}
                 />
 

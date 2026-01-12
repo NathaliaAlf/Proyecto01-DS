@@ -12,7 +12,7 @@ import Colors from '@/constants/Colors';
 import { useFilters } from '@/context/FilterContext';
 import { gbifService, ImageItem } from '@/services/gbifService';
 import { LinearGradient } from 'expo-linear-gradient';
-import { useLocalSearchParams, useRouter, Stack } from 'expo-router';
+import { useLocalSearchParams, useRouter } from 'expo-router';
 import React, { useEffect, useState } from 'react';
 import {
   ActivityIndicator,
@@ -90,7 +90,6 @@ export default function SpeciesScreen() {
 
   return (
     <View style={[styles.container, { backgroundColor: Colors[colorScheme].background }]}>
-      <Stack.Screen options={{ headerShown: true, title: 'Resultados' }} />
 
       <FilterOverlay 
         onApply={() => {
