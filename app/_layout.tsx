@@ -57,7 +57,7 @@ function RootLayoutNav() {
     if (!user && !inAuthGroup) {
       router.replace('/(auth)/login');
     } else if (user && inAuthGroup) {
-      router.replace('/(tabs)/home');
+      router.replace('/(tabs)');
     }
   }, [user, loading, segments, navigationState?.key]);
 

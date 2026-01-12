@@ -1,5 +1,8 @@
 import Colors from '@/constants/Colors';
+import { useAuth } from '@/context/AuthContext';
+import { addToFavorites, getFavorites, removeFromFavorites } from '@/services/favoritesService';
 import { getTaxonGroupImages, ImageItem } from '@/services/gbifService';
+import AntDesign from '@expo/vector-icons/AntDesign';
 import Entypo from '@expo/vector-icons/Entypo';
 import FontAwesome6 from '@expo/vector-icons/FontAwesome6';
 import Ionicons from '@expo/vector-icons/Ionicons';
@@ -9,6 +12,7 @@ import { useRouter } from 'expo-router';
 import React, { useEffect, useRef, useState } from 'react';
 import {
   ActivityIndicator,
+  Alert,
   Dimensions,
   FlatList,
   Image,
@@ -60,11 +64,43 @@ function getIcon(name: string){
 
 export default function HomeScreen() {
   const router = useRouter();
+  const { user } = useAuth();
   const [imagesBySection, setImagesBySection] = useState<Record<string, ImageWithDimensions[]>>({});
   const [loadingStates, setLoadingStates] = useState<SectionState>({});
   const [loadingMoreStates, setLoadingMoreStates] = useState<SectionLoadingMore>({});
   const [offsetBySection, setOffsetBySection] = useState<SectionOffset>({});
+  const [favoriteKeys, setFavoriteKeys] = useState<Set<number>>(new Set());
+  const [contextMenu, setContextMenu] = useState<{
+    visible: boolean;
+    x: number;
+    y: number;
+    speciesKey: number;
+    scientificName: string;
+    commonName?: string;
+    imageUrl: string;
+    isFavorite: boolean;
+  } | null>(null);
   const flatListRefs = useRef<Record<string, FlatList<any> | null>>({});
+
+  // Load favorites
+  useEffect(() => {
+    const loadFavorites = async () => {
+      if (!user) {
+        setFavoriteKeys(new Set());
+        return;
+      }
+      
+      try {
+        const favs = await getFavorites(user.uid);
+        const keys = new Set(favs.map(fav => fav.speciesKey));
+        setFavoriteKeys(keys);
+      } catch (error) {
+        console.error('Error loading favorites:', error);
+      }
+    };
+
+    loadFavorites();
+  }, [user]);
 
   // Process images to calculate their width
   const processImages = async (images: ImageItem[]): Promise<ImageWithDimensions[]> => {
@@ -127,7 +163,7 @@ export default function HomeScreen() {
         
         results[section] = processedImages;
         setLoadingStates(prev => ({ ...prev, [section]: false }));
-        setOffsetBySection(prev => ({ ...prev, [section]: 100 })); // Start next fetch at offset 100
+        setOffsetBySection(prev => ({ ...prev, [section]: 100 }));
       }
 
       setImagesBySection(results);
@@ -138,7 +174,6 @@ export default function HomeScreen() {
 
   // Load more images for a specific section
   const loadMoreImages = async (section: string) => {
-    // Prevent multiple simultaneous loads
     if (loadingMoreStates[section]) {
       return;
     }
@@ -147,20 +182,15 @@ export default function HomeScreen() {
 
     try {
       const currentOffset = offsetBySection[section] || 0;
-      console.log(`Loading more images for ${section}, offset: ${currentOffset}`);
-      
-      // Get more images with offset
       const newImages = await getTaxonGroupImages(section, currentOffset);
       
       if (newImages.length === 0) {
-        console.log(`No more images available for ${section}`);
         setLoadingMoreStates(prev => ({ ...prev, [section]: false }));
         return;
       }
       
       const processedNewImages = await processImages(newImages);
       
-      // Filter out duplicates based on taxonKey
       const existingKeys = new Set(
         imagesBySection[section]?.map(img => img.taxonKey) || []
       );
@@ -169,21 +199,17 @@ export default function HomeScreen() {
         img => !existingKeys.has(img.taxonKey)
       );
 
-      console.log(`Found ${uniqueNewImages.length} new unique species for ${section}`);
-
       if (uniqueNewImages.length > 0) {
         setImagesBySection(prev => ({
           ...prev,
           [section]: [...(prev[section] || []), ...uniqueNewImages]
         }));
         
-        // Update offset based on total items fetched, not unique items
         setOffsetBySection(prev => ({
           ...prev,
-          [section]: currentOffset + 100 // Match the limit in API call
+          [section]: currentOffset + 100
         }));
       } else {
-        // If no unique images found, still increment offset to get next batch
         setOffsetBySection(prev => ({
           ...prev,
           [section]: currentOffset + 100
@@ -210,6 +236,93 @@ export default function HomeScreen() {
     });
   };
 
+  const handleContextMenu = (event: any, speciesKey: number, scientificName: string, commonName: string | undefined, imageUrl: string) => {
+    event.preventDefault();
+    const isFavorite = favoriteKeys.has(speciesKey);
+    
+    setContextMenu({
+      visible: true,
+      x: event.nativeEvent.pageX,
+      y: event.nativeEvent.pageY,
+      speciesKey,
+      scientificName,
+      commonName,
+      imageUrl,
+      isFavorite
+    });
+  };
+
+  const closeContextMenu = () => {
+    setContextMenu(null);
+  };
+
+  const handleToggleFavorite = async () => {
+    if (!contextMenu || !user) {
+      if (!user) {
+        Alert.alert('Login Required', 'Please log in to manage favorites');
+      }
+      closeContextMenu();
+      return;
+    }
+
+    try {
+      if (contextMenu.isFavorite) {
+        // Remove from favorites
+        const success = await removeFromFavorites(user.uid, contextMenu.speciesKey);
+        
+        if (success) {
+          setFavoriteKeys(prev => {
+            const newSet = new Set(prev);
+            newSet.delete(contextMenu.speciesKey);
+            return newSet;
+          });
+          
+          Alert.alert(
+            'Removed', 
+            `Removed ${contextMenu.commonName || contextMenu.scientificName} from favorites`
+          );
+        }
+      } else {
+        // Add to favorites
+        const success = await addToFavorites(user.uid, {
+          speciesKey: contextMenu.speciesKey,
+          scientificName: contextMenu.scientificName,
+          commonName: contextMenu.commonName,
+          imageUrl: contextMenu.imageUrl
+        });
+
+        if (success) {
+          setFavoriteKeys(prev => new Set(prev).add(contextMenu.speciesKey));
+          
+          Alert.alert(
+            'Success!', 
+            `Added ${contextMenu.commonName || contextMenu.scientificName} to favorites`
+          );
+        } else {
+          Alert.alert('Already Added', 'This species is already in your favorites');
+        }
+      }
+    } catch (error) {
+      console.error('Error toggling favorite:', error);
+      Alert.alert('Error', 'Failed to update favorites. Please try again.');
+    }
+    
+    closeContextMenu();
+  };
+
+  const handleOpenDetails = () => {
+    if (contextMenu) {
+      router.push({
+        pathname: '/DetailedDescription',
+        params: {
+          speciesKey: contextMenu.speciesKey,
+          scientificName: contextMenu.scientificName
+        }
+      });
+      closeContextMenu();
+    }
+  };
+
   const renderFooter = (section: string) => {
     if (!loadingMoreStates[section]) return null;
     
@@ -225,7 +338,6 @@ export default function HomeScreen() {
       <ScrollView style={styles.content}>
         {sections.map((element, index) => (
           <View key={index}>
-            {/* section title */}
             <View style={styles.section_title_container}>
               {getIcon(element)}
               <Pressable>
@@ -242,9 +354,7 @@ export default function HomeScreen() {
               </Pressable>
             </View>
 
-            {/* section content */}
             <View style={styles.section}>
-              {/* left arrow */}
               <TouchableOpacity
                 style={styles.arrow_container}
                 onPress={() =>
@@ -257,7 +367,6 @@ export default function HomeScreen() {
                 <Entypo name="chevron-thin-left" style={styles.arrow} />
               </TouchableOpacity>
 
-              {/* images with loading state */}
               <View style={styles.species_pics_row_container}>
                 {loadingStates[element] ? (
                   <View style={styles.loadingContainer}>
@@ -283,44 +392,61 @@ export default function HomeScreen() {
                       </View>
                     }
                     ListFooterComponent={renderFooter(element)}
-                    renderItem={({ item, index }) => (
-                      <Pressable onPress={() => handleSpeciesPress(item.taxonKey, item.scientificName)}>
-                        {({hovered}) => (
-                          <View 
-                            style={[
-                              styles.species_picture_container,
-                              { width: item.calculatedWidth }
-                            ]}
+                    renderItem={({ item, index }) => {
+                      const isFavorite = favoriteKeys.has(item.taxonKey);
+                      
+                      return (
+                        <View>
+                          <Pressable 
+                            onPress={() => handleSpeciesPress(item.taxonKey, item.scientificName)}
+                            onLongPress={(e) => handleContextMenu(e, item.taxonKey, item.scientificName, item.commonName, item.imageUrl)}
                           >
-                            <Image
-                              source={{ uri: item.imageUrl }}
-                              style={styles.species_picture}
-                              resizeMode="cover"
-                              onError={() => handleImageError(element, index)}
-                            />
-                            <LinearGradient
-                              colors={['rgba(0,0,0,0.9)', 'transparent']}
-                              start={{ x: 0, y: 1 }}
-                              end={{ x: 0, y: 0 }}
-                              style={[
-                                styles.gradient,
-                                hovered && styles.gradient_hovered
-                              ]}
-                            />
-                            <View style={styles.speciesNameContainer}>
-                              <Text style={styles.speciesName} numberOfLines={2}>
-                                {item.commonName || item.scientificName}
-                              </Text>
-                            </View>
-                          </View>
-                        )}
-                      </Pressable>
-                    )}
+                            {({hovered}) => (
+                              <View 
+                                style={[
+                                  styles.species_picture_container,
+                                  { width: item.calculatedWidth }
+                                ]}
+                                // @ts-ignore - onContextMenu is web-only
+                                onContextMenu={(e) => handleContextMenu(e, item.taxonKey, item.scientificName, item.commonName, item.imageUrl)}
+                              >
+                                <Image
+                                  source={{ uri: item.imageUrl }}
+                                  style={styles.species_picture}
+                                  resizeMode="cover"
+                                  onError={() => handleImageError(element, index)}
+                                />
+                                <LinearGradient
+                                  colors={['rgba(0,0,0,0.9)', 'transparent']}
+                                  start={{ x: 0, y: 1 }}
+                                  end={{ x: 0, y: 0 }}
+                                  style={[
+                                    styles.gradient,
+                                    hovered && styles.gradient_hovered
+                                  ]}
+                                />
+                                <View style={styles.speciesNameContainer}>
+                                  <Text style={styles.speciesName} numberOfLines={2}>
+                                    {item.commonName || item.scientificName}
+                                  </Text>
+                                </View>
+                                
+                                {/* Favorite badge */}
+                                {isFavorite && (
+                                  <View style={styles.favoriteBadge}>
+                                    <AntDesign name="star" style={styles.Badge} />
+                                  </View>
+                                )}
+                              </View>
+                            )}
+                          </Pressable>
+                        </View>
+                      );
+                    }}
                   />
                 )}
               </View>
 
-              {/* Right arrow */}
               <TouchableOpacity
                 style={styles.arrow_container}
                 onPress={() =>
@@ -335,6 +461,54 @@ export default function HomeScreen() {
           </View>
         ))}
       </ScrollView>
+
+      {/* Context Menu */}
+      {contextMenu?.visible && (
+        <>
+          <Pressable 
+            style={styles.contextMenuBackdrop} 
+            onPress={closeContextMenu}
+          />
+          <View 
+            style={[
+              styles.contextMenu,
+              { top: contextMenu.y, left: contextMenu.x }
+            ]}
+          >
+            <TouchableOpacity 
+              style={styles.contextMenuItem}
+              onPress={handleOpenDetails}
+            >
+              <Ionicons name="information-circle-outline" size={20} color={Colors.light.text} />
+              <Text style={styles.contextMenuText}>View Details</Text>
+            </TouchableOpacity>
+            
+            <View style={styles.contextMenuDivider} />
+            
+            <TouchableOpacity 
+              style={[
+                styles.contextMenuItem,
+                contextMenu.isFavorite && styles.contextMenuItemDanger
+              ]}
+              onPress={handleToggleFavorite}
+            >
+              <Ionicons 
+                name={contextMenu.isFavorite ? "trash" : "heart-outline"} 
+                size={20} 
+                color={contextMenu.isFavorite ? "#e74c3c" : Colors.light.text} 
+              />
+              <Text 
+                style={[
+                  styles.contextMenuText,
+                  contextMenu.isFavorite && styles.contextMenuTextDanger
+                ]}
+              >
+                {contextMenu.isFavorite ? 'Remove from Favorites' : 'Add to Favorites'}
+              </Text>
+            </TouchableOpacity>
+          </View>
+        </>
+      )}
     </View>
   );
 }
@@ -428,6 +602,19 @@ const styles = StyleSheet.create({
     textShadowOffset: { width: 0, height: 1 },
     textShadowRadius: 3,
   },
+  Badge: {
+    color: "#FFE924",
+    fontSize: 16,
+  },
+  favoriteBadge: {
+    position: 'absolute',
+    top: 8,
+    right: 8,
+    width: 30,
+    height: 30,
+    justifyContent: 'center',
+    alignItems: 'center',
+  },
   arrow: {
     fontSize: 40,
     color: Colors.light.selected,
@@ -463,5 +650,52 @@ const styles = StyleSheet.create({
     paddingHorizontal: 10,
     alignItems: 'center',
     justifyContent: 'center',
+  },
+  contextMenuBackdrop: {
+    position: 'absolute',
+    top: 0,
+    left: 0,
+    right: 0,
+    bottom: 0,
+    backgroundColor: 'transparent',
+  },
+  contextMenu: {
+    position: 'absolute',
+    backgroundColor: '#fff',
+    borderRadius: 8,
+    paddingVertical: 8,
+    minWidth: 200,
+    shadowColor: "#000",
+    shadowOffset: {
+      width: 0,
+      height: 4,
+    },
+    shadowOpacity: 0.3,
+    shadowRadius: 8,
+    elevation: 8,
+    zIndex: 1000,
+  },
+  contextMenuItem: {
+    flexDirection: 'row',
+    alignItems: 'center',
+    paddingVertical: 12,
+    paddingHorizontal: 16,
+    gap: 12,
+  },
+  contextMenuItemDanger: {
+    backgroundColor: 'rgba(231, 76, 60, 0.05)',
+  },
+  contextMenuText: {
+    fontSize: 15,
+    color: Colors.light.text,
+    fontWeight: '500',
+  },
+  contextMenuTextDanger: {
+    color: '#e74c3c',
+  },
+  contextMenuDivider: {
+    height: 1,
+    backgroundColor: '#e0e0e0',
+    marginVertical: 4,
   }
 });

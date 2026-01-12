@@ -29,19 +29,13 @@ export default function TabLayout() {
   const SIDE_ELEMENTS_WIDTH = 400; 
   const availableWidth = Math.max(screenWidth - SIDE_ELEMENTS_WIDTH, 100);
 
-  const handleLogoPress = () => {
-    router.push({
-      pathname: '/home',
-    });
-  };
-
   const handleHeaderSearch = async () => {
     if (!searchQuery.trim()) return;
     
     setIsSearching(true);
     try {
       router.push({
-        pathname: '/(tabs)/especies',
+        pathname: '/especies',
         params: { search: searchQuery }
       });
     } catch (error) {
@@ -136,7 +130,7 @@ export default function TabLayout() {
         },
         headerLeft: () => (
           <View style={styles.headerLeft}>
-            <TouchableOpacity onPress={() => handleLogoPress()}>
+            <TouchableOpacity>
               <Image
                 source={require("@/assets/images/logo.png")}
                 style={styles.logo}
@@ -178,7 +172,7 @@ export default function TabLayout() {
       }}
     >
       <Tabs.Screen
-        name="home"
+        name="index"
         options={{
           title: 'Home',
           tabBarIcon: ({ color, focused }) => (
@@ -188,11 +182,11 @@ export default function TabLayout() {
       />
       
       <Tabs.Screen
-        name="especies"
+        name="favorites"
         options={{
-          title: 'Especies',
+          title: 'Favorites',
           tabBarIcon: ({ color, focused }) => (
-            <Ionicons name={focused ? 'leaf' : 'leaf-outline'} color={color} size={24} />
+            <Ionicons name={focused ? 'star' : 'star-outline'} color={color} size={24} />
           ),
         }}
       />
