@@ -1,118 +1,319 @@
 import FontAwesome from '@expo/vector-icons/FontAwesome';
-import MaterialCommunityIcons from '@expo/vector-icons/MaterialCommunityIcons';
-import { useLocalSearchParams } from 'expo-router';
-import React from 'react';
-import { Dimensions, Pressable, ScrollView, StyleSheet, Text, TextInput, View } from 'react-native';
+import { useLocalSearchParams, useRouter } from 'expo-router';
+import React, { useEffect, useMemo, useState } from 'react';
+import { Pressable, ScrollView, StyleSheet, Text, View, TouchableOpacity, ActivityIndicator, Modal, FlatList, TextInput, Image } from 'react-native';
+import { gbifService } from '@/services/gbifService';
+import { GBIFCountry, Taxon } from '@/services/gbifTypes';
 
-const { width } = Dimensions.get('window');
+type ActiveTab = 'overview' | 'seasonality';
 
 export default function DetailedDescriptionScreen() {
   const { speciesKey, scientificName } = useLocalSearchParams();
+  const router = useRouter();
+  
+  // State for the active tab
+  const [activeTab, setActiveTab] = useState<ActiveTab>('overview');
+
+  // Data states
+  const [monthlyData, setMonthlyData] = useState<number[]>(new Array(12).fill(0));
+  const [taxonomy, setTaxonomy] = useState<Taxon[]>([]);
+  const [images, setImages] = useState<string[]>([]);
+  const [countries, setCountries] = useState<GBIFCountry[]>([]);
+  const [regionsByCountry, setRegionsByCountry] = useState<Map<string, Set<string>>>(new Map());
+
+  // Loading states
+  const [loadingChart, setLoadingChart] = useState(true);
+  const [loadingTaxonomy, setLoadingTaxonomy] = useState(true);
+  const [loadingImages, setLoadingImages] = useState(true);
+  const [loadingLocations, setLoadingLocations] = useState(true);
+  
+  // Error and interaction states
+  const [error, setError] = useState<string | null>(null);
+  const [selectedMonth, setSelectedMonth] = useState<number | null>(null);
+  
+  // Filter states
+  const [selectedCountry, setSelectedCountry] = useState<GBIFCountry | null>(null);
+  const [selectedRegion, setSelectedRegion] = useState<string | null>(null);
+  
+  // Modal UI states
+  const [showCountryModal, setShowCountryModal] = useState(false);
+  const [showRegionModal, setShowRegionModal] = useState(false);
+  const [countrySearch, setCountrySearch] = useState('');
+  const [regionSearch, setRegionSearch] = useState('');
+
+  useEffect(() => {
+    const key = Array.isArray(speciesKey) ? speciesKey[0] : speciesKey;
+    if (key) {
+      const numericKey = Number(key);
+      loadInitialData(numericKey);
+    }
+  }, [speciesKey]);
+
+  // Effect for refetching chart data when filters change
+  useEffect(() => {
+    const key = Array.isArray(speciesKey) ? speciesKey[0] : speciesKey;
+    if (key) {
+      fetchSeasonalityData(Number(key));
+    }
+  }, [selectedCountry, selectedRegion]);
+
+  const loadInitialData = (key: number) => {
+    loadVerifiedLocations(key);
+    loadTaxonomy(key);
+    loadImages(key);
+    fetchSeasonalityData(key);
+  };
+
+  const loadVerifiedLocations = async (key: number) => {
+    setLoadingLocations(true);
+    try {
+      const { countries: verifiedCountries, regionsByCountry: verifiedRegions } = await gbifService.getVerifiedLocations(key);
+      verifiedCountries.sort((a, b) => a.title.localeCompare(b.title));
+      setCountries(verifiedCountries);
+      setRegionsByCountry(verifiedRegions);
+    } catch (err) {
+      console.error("Error loading verified locations", err);
+      setError("No se pudieron cargar los datos de ubicación para esta especie.");
+    } finally {
+      setLoadingLocations(false);
+    }
+  };
+
+  const loadTaxonomy = async (key: number) => {
+    setLoadingTaxonomy(true);
+    try {
+      const hierarchy = await gbifService.getTaxonomicHierarchy(key);
+      setTaxonomy(hierarchy);
+    } catch (err) {
+      console.error("Error loading taxonomy", err);
+    } finally {
+      setLoadingTaxonomy(false);
+    }
+  };
+
+  const loadImages = async (key: number) => {
+    setLoadingImages(true);
+    try {
+      const imageList = await gbifService.getSpeciesImages(key, 3);
+      setImages(imageList);
+    } catch (err) {
+      console.error("Error loading images", err);
+    } finally {
+      setLoadingImages(false);
+    }
+  };
+
+  const fetchSeasonalityData = async (key: number) => {
+    setLoadingChart(true);
+    setError(null);
+    try {
+      const countryIso = selectedCountry?.iso2;
+      const regionName = selectedRegion || undefined;
+      const data = await gbifService.getMonthlyOccurrences(key, countryIso, regionName);
+      
+      const monthCounts = new Array(12).fill(0);
+      if (data.facets && data.facets[0] && data.facets[0].counts) {
+        data.facets[0].counts.forEach((item: { name: string, count: number }) => {
+          const monthIndex = parseInt(item.name) - 1;
+          if (monthIndex >= 0 && monthIndex < 12) {
+            monthCounts[monthIndex] = item.count;
+          }
+        });
+      }
+      setMonthlyData(monthCounts);
+    } catch (err) {
+      console.error(err);
+      setError("Error al cargar datos de estacionalidad");
+      setMonthlyData(new Array(12).fill(0));
+    } finally {
+      setLoadingChart(false);
+    }
+  };
+
+  const availableRegions = useMemo(() => {
+    if (!selectedCountry) return [];
+    const regions = regionsByCountry.get(selectedCountry.iso2);
+    return regions ? Array.from(regions).sort() : [];
+  }, [selectedCountry, regionsByCountry]);
+
+  const filteredCountries = useMemo(() => {
+    return countries.filter(c => c.title.toLowerCase().includes(countrySearch.toLowerCase()));
+  }, [countries, countrySearch]);
+
+  const filteredRegions = useMemo(() => {
+    return availableRegions.filter(r => r.toLowerCase().includes(regionSearch.toLowerCase()));
+  }, [availableRegions, regionSearch]);
+
+  const maxCount = Math.max(...monthlyData, 1);
+  const monthNames = ['Ene', 'Feb', 'Mar', 'Abr', 'May', 'Jun', 'Jul', 'Ago', 'Sep', 'Oct', 'Nov', 'Dic'];
+
+  // --- Render Functions for each Tab ---
+
+  const renderOverview = () => (
+    <ScrollView>
+      <View style={styles.section}>
+        {loadingImages ? (
+          <ActivityIndicator style={{height: 200}} color="#1A4508" />
+        ) : (
+          <View style={styles.galleryContainer}>
+            <View style={styles.galleryImageSmall}>
+              {images[1] && <Image source={{ uri: images[1] }} style={styles.image} />}
+            </View>
+            <View style={styles.galleryImageLarge}>
+              {images[0] ? (
+                <Image source={{ uri: images[0] }} style={styles.image} />
+              ) : (
+                <View style={styles.noImage}>
+                  <Text style={styles.noImageText}>No Image Available</Text>
+                </View>
+              )}
+            </View>
+            <View style={styles.galleryImageSmall}>
+              {images[2] && <Image source={{ uri: images[2] }} style={styles.image} />}
+            </View>
+          </View>
+        )}
+
+        {loadingTaxonomy ? (
+          <ActivityIndicator color="#1A4508" style={{marginTop: 20}}/>
+        ) : (
+          <View style={styles.taxonomySection}>
+            <Text style={styles.sectionTitle}>Clasificación Taxonómica</Text>
+            {taxonomy.map((taxon, index) => (
+              <View key={index} style={[styles.taxonomyItem, { marginLeft: index * 10 }]}>
+                <Text style={styles.taxonomyRank}>{taxon.rank}</Text>
+                <Text style={styles.taxonomyName}>{taxon.canonicalName}</Text>
+              </View>
+            ))}
+          </View>
+        )}
+      </View>
+    </ScrollView>
+  );
+
+  const renderSeasonality = () => (
+    <ScrollView>
+      <View style={styles.section}>
+        <Text style={styles.sectionTitle}>Seasonality</Text>
+        <View style={styles.filterSection}>
+          <Text style={styles.filterLabel}>País:</Text>
+          <View style={styles.selectorContainer}>
+            {selectedCountry && (
+              <TouchableOpacity style={styles.clearButton} onPress={() => { setSelectedCountry(null); setSelectedRegion(null); }}>
+                <FontAwesome name="times-circle" size={20} color="#999" />
+              </TouchableOpacity>
+            )}
+            <TouchableOpacity style={styles.dropdownSelector} onPress={() => setShowCountryModal(true)}>
+              <Text style={selectedCountry ? styles.dropdownText : styles.placeholderText} numberOfLines={1}>
+                {loadingLocations ? "Cargando ubicaciones..." : (selectedCountry ? selectedCountry.title : "Todos los países (Global)")}
+              </Text>
+              <FontAwesome name="chevron-down" size={14} color="#666" />
+            </TouchableOpacity>
+          </View>
+          <Text style={styles.filterLabel}>Región (Opcional):</Text>
+          <View style={styles.selectorContainer}>
+            {selectedRegion && (
+              <TouchableOpacity style={styles.clearButton} onPress={() => setSelectedRegion(null)}>
+                <FontAwesome name="times-circle" size={20} color="#999" />
+              </TouchableOpacity>
+            )}
+            <TouchableOpacity style={[styles.dropdownSelector, !selectedCountry && styles.disabledSelector]} onPress={() => selectedCountry && setShowRegionModal(true)} disabled={!selectedCountry}>
+              <Text style={selectedRegion ? styles.dropdownText : styles.placeholderText} numberOfLines={1}>
+                {selectedRegion || "Todas las regiones"}
+              </Text>
+              <FontAwesome name="chevron-down" size={14} color="#666" />
+            </TouchableOpacity>
+          </View>
+        </View>
+        {loadingChart ? (
+          <ActivityIndicator size="large" color="#1A4508" style={{ marginVertical: 20 }} />
+        ) : error ? (
+          <View style={styles.errorContainer}><Text style={styles.errorText}>{error}</Text></View>
+        ) : (
+          <View style={styles.chartContainer}>
+            <View style={styles.chartGrid}>
+              {monthlyData.map((count, index) => (
+                <Pressable key={index} style={styles.barContainer} onHoverIn={() => setSelectedMonth(index)} onHoverOut={() => setSelectedMonth(null)} onPress={() => setSelectedMonth(index === selectedMonth ? null : index)}>
+                  {selectedMonth === index && <View style={styles.tooltip}><Text style={styles.tooltipText}>{count}</Text></View>}
+                  <View style={[styles.bar, { height: `${(count / maxCount) * 100}%`, backgroundColor: selectedMonth === index ? '#1A4508' : '#3D7716', opacity: selectedMonth === index ? 1 : 0.7 }]} />
+                  <Text style={[styles.monthLabel, selectedMonth === index && styles.monthLabelSelected]}>{monthNames[index]}</Text>
+                </Pressable>
+              ))}
+            </View>
+          </View>
+        )}
+      </View>
+    </ScrollView>
+  );
+
   return (
     <View style={styles.container}>
-      {/* Header */}
       <View style={styles.header}>
-        <View style={styles.headerTop}>
-          <View style={styles.logoContainer}>
-             {/* DNA Isotype simulation */}
-             <MaterialCommunityIcons name="dna" size={20} color="white" style={{marginRight: 5}} />
-             <Text style={styles.logoText}>LIFE</Text>
-          </View>
-          <View style={styles.headerIcons}>
-             <FontAwesome name="globe" size={20} color="white" style={styles.icon} />
-             <FontAwesome name="user" size={20} color="white" style={styles.icon} />
-             <FontAwesome name="adjust" size={20} color="white" style={styles.icon} />
-          </View>
-        </View>
-        <View style={styles.searchContainer}>
-          <FontAwesome name="filter" size={20} color="white" style={styles.filterIcon} />
-          <View style={styles.searchBar}>
-            <FontAwesome name="search" size={16} color="#ccc" />
-            <TextInput placeholder="Search" style={styles.searchInput} />
-          </View>
-        </View>
+        <TouchableOpacity onPress={() => router.back()}>
+          <FontAwesome name="arrow-left" size={20} color="#1A4508" />
+        </TouchableOpacity>
+        <Text style={styles.scientificName}>{scientificName}</Text>
       </View>
 
-      <ScrollView style={styles.content}>
-        {/* Pantalla 1: Detalle de la Especie y Taxonomía */}
-        <View style={styles.section}>
-          <View style={styles.titleContainer}>
-             <FontAwesome name="arrow-left" size={20} color="#1A4508" />
-             <Text style={styles.scientificName}>{scientificName}</Text>
-          </View>
+      <View style={styles.tabBar}>
+        <TouchableOpacity style={[styles.tabItem, activeTab === 'overview' && styles.tabItemActive]} onPress={() => setActiveTab('overview')}>
+          <Text style={[styles.tabText, activeTab === 'overview' && styles.tabTextActive]}>Resumen</Text>
+        </TouchableOpacity>
+        <TouchableOpacity style={[styles.tabItem, activeTab === 'seasonality' && styles.tabItemActive]} onPress={() => setActiveTab('seasonality')}>
+          <Text style={[styles.tabText, activeTab === 'seasonality' && styles.tabTextActive]}>Estacionalidad</Text>
+        </TouchableOpacity>
+      </View>
 
-          {/* Gallery */}
-          <View style={styles.galleryContainer}>
-             {/* Left Image */}
-             <View style={[styles.galleryImageSmall, {backgroundColor: '#333'}]} />
-             {/* Center Image */}
-             <View style={styles.galleryImageLarge}>
-                <View style={{width: '100%', height: '100%', backgroundColor: '#3D7716', alignItems: 'center', justifyContent: 'center'}}>
-                    <Text style={{color: 'white'}}>Oruga</Text>
-                </View>
-                <View style={styles.imageOverlay}>
-                    <Text style={styles.overlayText}>Order Lepidoptera</Text>
-                </View>
-             </View>
-             {/* Right Image */}
-             <View style={[styles.galleryImageSmall, {backgroundColor: '#FFEABD'}]} />
-          </View>
+      <View style={styles.content}>
+        {activeTab === 'overview' && renderOverview()}
+        {activeTab === 'seasonality' && renderSeasonality()}
+      </View>
 
-          {/* Taxonomy */}
-          <View style={styles.taxonomyContainer}>
-             <View style={styles.taxonomyItem}><Text style={styles.taxonomyLabel}>Kingdom</Text></View>
-             <View style={styles.taxonomyItem}><Text style={styles.taxonomyLabel}>Phylum</Text></View>
-             <View style={styles.taxonomyItem}><Text style={styles.taxonomyLabel}>Species</Text></View>
-             <View style={styles.taxonomyItem}><Text style={styles.taxonomyLabel}>Genus</Text></View>
+      {/* --- Modals --- */}
+      <Modal visible={showCountryModal} animationType="slide" transparent={true} onRequestClose={() => setShowCountryModal(false)}>
+        <View style={styles.modalOverlay}>
+          <View style={styles.modalContent}>
+            <View style={styles.modalHeader}>
+              <Text style={styles.modalTitle}>Seleccionar País</Text>
+              <TouchableOpacity onPress={() => setShowCountryModal(false)}><FontAwesome name="close" size={24} color="#000" /></TouchableOpacity>
+            </View>
+            <TextInput style={styles.searchInput} placeholder="Buscar país..." value={countrySearch} onChangeText={setCountrySearch} />
+            <FlatList
+              data={filteredCountries}
+              keyExtractor={(item) => item.iso2}
+              renderItem={({ item }) => (
+                <TouchableOpacity style={styles.modalItem} onPress={() => { setSelectedCountry(item); setSelectedRegion(null); setShowCountryModal(false); }}>
+                  <Text style={styles.modalItemText}>{item.title}</Text>
+                  {selectedCountry?.iso2 === item.iso2 && <FontAwesome name="check" size={16} color="#1A4508" />}
+                </TouchableOpacity>
+              )}
+              ListEmptyComponent={<Text style={styles.emptyListText}>No hay países con registros verificados.</Text>}
+            />
           </View>
         </View>
-
-        {/* Pantalla 2: Mapa de Distribución */}
-        <View style={styles.section}>
-           <Text style={styles.sectionTitle}>Distribution Map</Text>
-           <View style={styles.mapContainer}>
-              {/* Placeholder for Map of Central America */}
-              <Text>Map of Central America (Guatemala, Honduras, El Salvador, Nicaragua)</Text>
-              {/* Pins */}
-              <View style={[styles.pin, {top: 50, left: 100}]} />
-              <View style={[styles.pin, {top: 80, left: 120}]} />
-              <View style={[styles.pin, {top: 60, left: 150}]} />
-              <View style={[styles.pin, {top: 90, left: 130}]} />
-           </View>
+      </Modal>
+      <Modal visible={showRegionModal} animationType="slide" transparent={true} onRequestClose={() => setShowRegionModal(false)}>
+        <View style={styles.modalOverlay}>
+          <View style={styles.modalContent}>
+            <View style={styles.modalHeader}>
+              <Text style={styles.modalTitle}>Seleccionar Región</Text>
+              <TouchableOpacity onPress={() => setShowRegionModal(false)}><FontAwesome name="close" size={24} color="#000" /></TouchableOpacity>
+            </View>
+            <TextInput style={styles.searchInput} placeholder="Buscar región..." value={regionSearch} onChangeText={setRegionSearch} />
+            <FlatList
+              data={filteredRegions}
+              keyExtractor={(item) => item}
+              renderItem={({ item }) => (
+                <TouchableOpacity style={styles.modalItem} onPress={() => { setSelectedRegion(item); setShowRegionModal(false); }}>
+                  <Text style={styles.modalItemText}>{item}</Text>
+                  {selectedRegion === item && <FontAwesome name="check" size={16} color="#1A4508" />}
+                </TouchableOpacity>
+              )}
+              ListEmptyComponent={<Text style={styles.emptyListText}>No hay regiones para este país.</Text>}
+            />
+          </View>
         </View>
-
-        {/* Pantalla 3: Gráfico de Estacionalidad y Filtros */}
-        <View style={styles.section}>
-           <Text style={styles.sectionTitle}>Seasonality</Text>
-           <View style={styles.chartContainer}>
-              {/* Placeholder for Chart */}
-              <View style={styles.chartGrid}>
-                 {/* Line simulation */}
-                 <View style={styles.chartLine} />
-              </View>
-              <Text style={{textAlign: 'center', marginTop: 10}}>Peak in May</Text>
-           </View>
-
-           <View style={styles.filterSection}>
-              <Text style={styles.filterLabel}>Place:</Text>
-              <View style={styles.filterInputContainer}>
-                 <Text>Co</Text>
-              </View>
-              {/* Dropdown simulation */}
-              <View style={styles.dropdown}>
-                 <Text style={styles.dropdownItem}>Colombia</Text>
-                 <View style={styles.dropdownItemSelected}>
-                    <Text style={styles.dropdownItemTextSelected}>Costa Rica</Text>
-                 </View>
-                 <Text style={styles.dropdownItem}>Congo</Text>
-              </View>
-              <Pressable style={styles.applyButton}>
-                 <Text style={styles.applyButtonText}>Apply</Text>
-              </Pressable>
-           </View>
-        </View>
-        <View style={{height: 50}} />
-      </ScrollView>
+      </Modal>
     </View>
   );
 }
@@ -123,64 +324,11 @@ const styles = StyleSheet.create({
     backgroundColor: '#fff',
   },
   header: {
-    backgroundColor: '#53A72F',
-    paddingTop: 50, // Safe area
-    paddingBottom: 15,
-    paddingHorizontal: 15,
-  },
-  headerTop: {
-    flexDirection: 'row',
-    justifyContent: 'space-between',
-    alignItems: 'center',
-    marginBottom: 10,
-  },
-  logoContainer: {
     flexDirection: 'row',
     alignItems: 'center',
-  },
-  logoText: {
-    color: '#FFFFFF',
-    fontSize: 20,
-    fontWeight: 'bold',
-  },
-  headerIcons: {
-    flexDirection: 'row',
-  },
-  icon: {
-    marginLeft: 15,
-  },
-  searchContainer: {
-    flexDirection: 'row',
-    alignItems: 'center',
-  },
-  filterIcon: {
-    marginRight: 10,
-  },
-  searchBar: {
-    flex: 1,
-    backgroundColor: '#FFFFFF',
-    borderRadius: 20,
-    flexDirection: 'row',
-    alignItems: 'center',
-    paddingHorizontal: 10,
-    height: 40,
-  },
-  searchInput: {
-    flex: 1,
-    marginLeft: 5,
-  },
-  content: {
-    flex: 1,
-  },
-  section: {
-    padding: 20,
-    borderBottomWidth: 1,
-    borderBottomColor: '#eee',
-  },
-  titleContainer: {
-    flexDirection: 'row',
-    alignItems: 'center',
-    marginBottom: 20,
+    paddingHorizontal: 20,
+    paddingTop: 20,
+    paddingBottom: 10,
   },
   scientificName: {
     fontSize: 18,
@@ -188,6 +336,35 @@ const styles = StyleSheet.create({
     color: '#1A4508',
     marginLeft: 10,
     fontStyle: 'italic',
+  },
+  tabBar: {
+    flexDirection: 'row',
+    justifyContent: 'space-around',
+    borderBottomWidth: 1,
+    borderBottomColor: '#eee',
+  },
+  tabItem: {
+    paddingVertical: 15,
+    paddingHorizontal: 10,
+    borderBottomWidth: 2,
+    borderBottomColor: 'transparent',
+  },
+  tabItemActive: {
+    borderBottomColor: '#1A4508',
+  },
+  tabText: {
+    fontSize: 16,
+    color: '#666',
+  },
+  tabTextActive: {
+    color: '#1A4508',
+    fontWeight: 'bold',
+  },
+  content: {
+    flex: 1,
+  },
+  section: {
+    padding: 20,
   },
   galleryContainer: {
     flexDirection: 'row',
@@ -200,36 +377,48 @@ const styles = StyleSheet.create({
     width: '20%',
     height: '80%',
     borderRadius: 10,
+    backgroundColor: '#f0f0f0',
+    overflow: 'hidden',
   },
   galleryImageLarge: {
     width: '55%',
     height: '100%',
     borderRadius: 10,
+    backgroundColor: '#f0f0f0',
     overflow: 'hidden',
-    position: 'relative',
-  },
-  imageOverlay: {
-    position: 'absolute',
-    bottom: 10,
-    left: 10,
-    backgroundColor: 'rgba(0,0,0,0.5)',
-    padding: 5,
-    borderRadius: 5,
-  },
-  overlayText: {
-    color: 'white',
-    fontSize: 12,
-  },
-  taxonomyContainer: {
-    flexDirection: 'row',
-    justifyContent: 'space-between',
-  },
-  taxonomyItem: {
+    justifyContent: 'center',
     alignItems: 'center',
   },
-  taxonomyLabel: {
+  image: {
+    width: '100%',
+    height: '100%',
+  },
+  noImage: {
+    justifyContent: 'center',
+    alignItems: 'center',
+  },
+  noImageText: {
+    color: '#999',
+    fontStyle: 'italic',
+  },
+  taxonomySection: {
+    marginTop: 10,
+  },
+  taxonomyItem: {
+    paddingVertical: 8,
+    borderBottomWidth: 1,
+    borderBottomColor: '#f5f5f5',
+  },
+  taxonomyRank: {
+    fontSize: 10,
+    color: '#666',
+    textTransform: 'uppercase',
+  },
+  taxonomyName: {
     color: '#1A4508',
     fontWeight: 'bold',
+    fontSize: 16,
+    fontStyle: 'italic',
   },
   sectionTitle: {
     fontSize: 18,
@@ -237,86 +426,163 @@ const styles = StyleSheet.create({
     marginBottom: 15,
     color: '#1A4508',
   },
-  mapContainer: {
-    height: 200,
-    backgroundColor: '#e0e0e0',
-    borderRadius: 10,
-    justifyContent: 'center',
-    alignItems: 'center',
-    position: 'relative',
-  },
-  pin: {
-    position: 'absolute',
-    width: 15,
-    height: 15,
-    backgroundColor: '#3D7716',
-    borderRadius: 7.5,
-    borderWidth: 2,
-    borderColor: '#1B1C1A',
-  },
   chartContainer: {
-    height: 200,
+    height: 220,
     backgroundColor: '#fff',
     marginBottom: 20,
     borderWidth: 1,
     borderColor: '#eee',
     padding: 10,
+    paddingTop: 30,
   },
   chartGrid: {
     flex: 1,
-    borderLeftWidth: 1,
-    borderBottomWidth: 1,
-    borderColor: '#ccc',
-    justifyContent: 'flex-end',
+    flexDirection: 'row',
+    alignItems: 'flex-end',
+    justifyContent: 'space-between',
+    paddingBottom: 20,
   },
-  chartLine: {
-    height: '80%', // Peak
+  barContainer: {
+    flex: 1,
+    height: '100%',
+    alignItems: 'center',
+    justifyContent: 'flex-end',
+    marginHorizontal: 2,
+    position: 'relative',
+  },
+  bar: {
     width: '100%',
-    backgroundColor: '#3D7716',
-    opacity: 0.5, // Just a visual representation
+    borderRadius: 2,
+    minHeight: 2,
+  },
+  monthLabel: {
+    fontSize: 9,
+    marginTop: 5,
+    color: '#666',
+    textAlign: 'center',
+  },
+  monthLabelSelected: {
+    fontWeight: 'bold',
+    color: '#1A4508',
+  },
+  tooltip: {
+    position: 'absolute',
+    top: -25,
+    backgroundColor: '#1A4508',
+    paddingHorizontal: 6,
+    paddingVertical: 2,
+    borderRadius: 4,
+    zIndex: 10,
+  },
+  tooltipText: {
+    color: '#fff',
+    fontSize: 10,
+    fontWeight: 'bold',
+  },
+  errorContainer: {
+    height: 200,
+    justifyContent: 'center',
+    alignItems: 'center',
+    backgroundColor: '#f9f9f9',
+    borderRadius: 10,
+    marginBottom: 20,
+  },
+  errorText: {
+    color: '#d9534f',
+    textAlign: 'center',
   },
   filterSection: {
     marginTop: 10,
+    marginBottom: 20,
   },
   filterLabel: {
     fontWeight: 'bold',
     color: '#1B1C1A',
     marginBottom: 5,
+    marginTop: 10,
   },
-  filterInputContainer: {
+  selectorContainer: {
+    flexDirection: 'row',
+    alignItems: 'center',
+  },
+  dropdownSelector: {
+    flex: 1,
     borderWidth: 1,
     borderColor: '#ccc',
-    padding: 10,
     borderRadius: 5,
-    marginBottom: 5,
-  },
-  dropdown: {
-    backgroundColor: '#f0f0f0',
-    borderRadius: 5,
-    overflow: 'hidden',
-    marginBottom: 10,
-  },
-  dropdownItem: {
-    padding: 10,
-    color: '#000',
-  },
-  dropdownItemSelected: {
-    padding: 10,
-    backgroundColor: '#1A4508',
-  },
-  dropdownItemTextSelected: {
-    color: '#FFFFFF',
-  },
-  applyButton: {
-    backgroundColor: '#1A4508',
-    padding: 10,
-    borderRadius: 5,
+    padding: 12,
+    flexDirection: 'row',
+    justifyContent: 'space-between',
     alignItems: 'center',
-    alignSelf: 'flex-end',
-    width: 100,
+    backgroundColor: '#f9f9f9',
   },
-  applyButtonText: {
-    color: '#FFFFFF',
+  disabledSelector: {
+    backgroundColor: '#eee',
+    opacity: 0.7,
+  },
+  dropdownText: {
+    color: '#000',
+    flex: 1,
+  },
+  placeholderText: {
+    color: '#999',
+    flex: 1,
+  },
+  clearButton: {
+    padding: 8,
+    marginRight: 8,
+  },
+  modalOverlay: {
+    flex: 1,
+    backgroundColor: 'rgba(0,0,0,0.5)',
+    justifyContent: 'flex-end',
+  },
+  modalContent: {
+    backgroundColor: '#fff',
+    borderTopLeftRadius: 20,
+    borderTopRightRadius: 20,
+    height: '70%',
+    padding: 20,
+  },
+  modalHeader: {
+    flexDirection: 'row',
+    justifyContent: 'space-between',
+    alignItems: 'center',
+    marginBottom: 20,
+    paddingBottom: 10,
+    borderBottomWidth: 1,
+    borderBottomColor: '#eee',
+  },
+  modalTitle: {
+    fontSize: 18,
     fontWeight: 'bold',
+    color: '#1A4508',
+  },
+  modalItem: {
+    paddingVertical: 15,
+    borderBottomWidth: 1,
+    borderBottomColor: '#f0f0f0',
+    flexDirection: 'row',
+    justifyContent: 'space-between',
+    alignItems: 'center',
+  },
+  modalItemText: {
+    fontSize: 16,
+    color: '#333',
+  },
+  emptyListText: {
+    textAlign: 'center',
+    color: '#999',
+    marginTop: 20,
+  },
+  searchInput: {
+    height: 45,
+    borderColor: '#E0E0E0',
+    backgroundColor: '#F5F5F5',
+    borderWidth: 1,
+    borderRadius: 8,
+    paddingHorizontal: 15,
+    marginBottom: 15,
+    fontSize: 16,
   },
 });
