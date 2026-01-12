@@ -1,9 +1,10 @@
+import { useTheme } from '@/context/ThemeContext';
+import { gbifService } from '@/services/gbifService';
+import { GBIFCountry, Taxon } from '@/services/gbifTypes';
 import FontAwesome from '@expo/vector-icons/FontAwesome';
 import { useLocalSearchParams, useRouter } from 'expo-router';
 import React, { useEffect, useMemo, useState } from 'react';
-import { Pressable, ScrollView, StyleSheet, Text, View, TouchableOpacity, ActivityIndicator, Modal, FlatList, TextInput, Image } from 'react-native';
-import { gbifService } from '@/services/gbifService';
-import { GBIFCountry, Taxon } from '@/services/gbifTypes';
+import { ActivityIndicator, FlatList, Image, Modal, Pressable, ScrollView, StyleSheet, Text, TextInput, TouchableOpacity, View } from 'react-native';
 
 type ActiveTab = 'overview' | 'seasonality';
 
@@ -40,6 +41,9 @@ export default function DetailedDescriptionScreen() {
   const [showRegionModal, setShowRegionModal] = useState(false);
   const [countrySearch, setCountrySearch] = useState('');
   const [regionSearch, setRegionSearch] = useState('');
+
+  const {colors} = useTheme();
+  const styles = makeStyles(colors);
 
   useEffect(() => {
     const key = Array.isArray(speciesKey) ? speciesKey[0] : speciesKey;
@@ -153,7 +157,7 @@ export default function DetailedDescriptionScreen() {
     <ScrollView>
       <View style={styles.section}>
         {loadingImages ? (
-          <ActivityIndicator style={{height: 200}} color="#1A4508" />
+          <ActivityIndicator style={{height: 200}} color={colors.selected} />
         ) : (
           <View style={styles.galleryContainer}>
             <View style={styles.galleryImageSmall}>
@@ -175,7 +179,7 @@ export default function DetailedDescriptionScreen() {
         )}
 
         {loadingTaxonomy ? (
-          <ActivityIndicator color="#1A4508" style={{marginTop: 20}}/>
+          <ActivityIndicator color={colors.selected} style={{marginTop: 20}}/>
         ) : (
           <View style={styles.taxonomySection}>
             <Text style={styles.sectionTitle}>Clasificación Taxonómica</Text>
@@ -200,33 +204,33 @@ export default function DetailedDescriptionScreen() {
           <View style={styles.selectorContainer}>
             {selectedCountry && (
               <TouchableOpacity style={styles.clearButton} onPress={() => { setSelectedCountry(null); setSelectedRegion(null); }}>
-                <FontAwesome name="times-circle" size={20} color="#999" />
+                <FontAwesome name="times-circle" size={20} color={colors.text} />
               </TouchableOpacity>
             )}
             <TouchableOpacity style={styles.dropdownSelector} onPress={() => setShowCountryModal(true)}>
               <Text style={selectedCountry ? styles.dropdownText : styles.placeholderText} numberOfLines={1}>
                 {loadingLocations ? "Cargando ubicaciones..." : (selectedCountry ? selectedCountry.title : "Todos los países (Global)")}
               </Text>
-              <FontAwesome name="chevron-down" size={14} color="#666" />
+              <FontAwesome name="chevron-down" size={14} color={colors.text} />
             </TouchableOpacity>
           </View>
           <Text style={styles.filterLabel}>Región (Opcional):</Text>
           <View style={styles.selectorContainer}>
             {selectedRegion && (
               <TouchableOpacity style={styles.clearButton} onPress={() => setSelectedRegion(null)}>
-                <FontAwesome name="times-circle" size={20} color="#999" />
+                <FontAwesome name="times-circle" size={20} color={colors.text} />
               </TouchableOpacity>
             )}
             <TouchableOpacity style={[styles.dropdownSelector, !selectedCountry && styles.disabledSelector]} onPress={() => selectedCountry && setShowRegionModal(true)} disabled={!selectedCountry}>
               <Text style={selectedRegion ? styles.dropdownText : styles.placeholderText} numberOfLines={1}>
                 {selectedRegion || "Todas las regiones"}
               </Text>
-              <FontAwesome name="chevron-down" size={14} color="#666" />
+              <FontAwesome name="chevron-down" size={14} color={colors.text} />
             </TouchableOpacity>
           </View>
         </View>
         {loadingChart ? (
-          <ActivityIndicator size="large" color="#1A4508" style={{ marginVertical: 20 }} />
+          <ActivityIndicator size="large" color={colors.selected} style={{ marginVertical: 20 }} />
         ) : error ? (
           <View style={styles.errorContainer}><Text style={styles.errorText}>{error}</Text></View>
         ) : (
@@ -235,7 +239,7 @@ export default function DetailedDescriptionScreen() {
               {monthlyData.map((count, index) => (
                 <Pressable key={index} style={styles.barContainer} onHoverIn={() => setSelectedMonth(index)} onHoverOut={() => setSelectedMonth(null)} onPress={() => setSelectedMonth(index === selectedMonth ? null : index)}>
                   {selectedMonth === index && <View style={styles.tooltip}><Text style={styles.tooltipText}>{count}</Text></View>}
-                  <View style={[styles.bar, { height: `${(count / maxCount) * 100}%`, backgroundColor: selectedMonth === index ? '#1A4508' : '#3D7716', opacity: selectedMonth === index ? 1 : 0.7 }]} />
+                  <View style={[styles.bar, { height: `${(count / maxCount) * 100}%`, backgroundColor: selectedMonth === index ? colors.selected : '#3D7716', opacity: selectedMonth === index ? 1 : 0.7 }]} />
                   <Text style={[styles.monthLabel, selectedMonth === index && styles.monthLabelSelected]}>{monthNames[index]}</Text>
                 </Pressable>
               ))}
@@ -250,7 +254,7 @@ export default function DetailedDescriptionScreen() {
     <View style={styles.container}>
       <View style={styles.header}>
         <TouchableOpacity onPress={() => router.back()}>
-          <FontAwesome name="arrow-left" size={20} color="#1A4508" />
+          <FontAwesome name="arrow-left" size={20} color={colors.selected} />
         </TouchableOpacity>
         <Text style={styles.scientificName}>{scientificName}</Text>
       </View>
@@ -275,7 +279,7 @@ export default function DetailedDescriptionScreen() {
           <View style={styles.modalContent}>
             <View style={styles.modalHeader}>
               <Text style={styles.modalTitle}>Seleccionar País</Text>
-              <TouchableOpacity onPress={() => setShowCountryModal(false)}><FontAwesome name="close" size={24} color="#000" /></TouchableOpacity>
+              <TouchableOpacity onPress={() => setShowCountryModal(false)}><FontAwesome name="close" size={24} color={colors.text} /></TouchableOpacity>
             </View>
             <TextInput style={styles.searchInput} placeholder="Buscar país..." value={countrySearch} onChangeText={setCountrySearch} />
             <FlatList
@@ -284,7 +288,7 @@ export default function DetailedDescriptionScreen() {
               renderItem={({ item }) => (
                 <TouchableOpacity style={styles.modalItem} onPress={() => { setSelectedCountry(item); setSelectedRegion(null); setShowCountryModal(false); }}>
                   <Text style={styles.modalItemText}>{item.title}</Text>
-                  {selectedCountry?.iso2 === item.iso2 && <FontAwesome name="check" size={16} color="#1A4508" />}
+                  {selectedCountry?.iso2 === item.iso2 && <FontAwesome name="check" size={16} color={colors.selected} />}
                 </TouchableOpacity>
               )}
               ListEmptyComponent={<Text style={styles.emptyListText}>No hay países con registros verificados.</Text>}
@@ -297,7 +301,7 @@ export default function DetailedDescriptionScreen() {
           <View style={styles.modalContent}>
             <View style={styles.modalHeader}>
               <Text style={styles.modalTitle}>Seleccionar Región</Text>
-              <TouchableOpacity onPress={() => setShowRegionModal(false)}><FontAwesome name="close" size={24} color="#000" /></TouchableOpacity>
+              <TouchableOpacity onPress={() => setShowRegionModal(false)}><FontAwesome name="close" size={24} color={colors.text} /></TouchableOpacity>
             </View>
             <TextInput style={styles.searchInput} placeholder="Buscar región..." value={regionSearch} onChangeText={setRegionSearch} />
             <FlatList
@@ -306,7 +310,7 @@ export default function DetailedDescriptionScreen() {
               renderItem={({ item }) => (
                 <TouchableOpacity style={styles.modalItem} onPress={() => { setSelectedRegion(item); setShowRegionModal(false); }}>
                   <Text style={styles.modalItemText}>{item}</Text>
-                  {selectedRegion === item && <FontAwesome name="check" size={16} color="#1A4508" />}
+                  {selectedRegion === item && <FontAwesome name="check" size={16} color={colors.selected} />}
                 </TouchableOpacity>
               )}
               ListEmptyComponent={<Text style={styles.emptyListText}>No hay regiones para este país.</Text>}
@@ -318,10 +322,11 @@ export default function DetailedDescriptionScreen() {
   );
 }
 
-const styles = StyleSheet.create({
+const makeStyles = (colors: any) =>
+  StyleSheet.create({
   container: {
     flex: 1,
-    backgroundColor: '#fff',
+    backgroundColor: colors.background,
   },
   header: {
     flexDirection: 'row',
@@ -333,7 +338,7 @@ const styles = StyleSheet.create({
   scientificName: {
     fontSize: 18,
     fontWeight: 'bold',
-    color: '#1A4508',
+    color: colors.selected,
     marginLeft: 10,
     fontStyle: 'italic',
   },
@@ -341,7 +346,7 @@ const styles = StyleSheet.create({
     flexDirection: 'row',
     justifyContent: 'space-around',
     borderBottomWidth: 1,
-    borderBottomColor: '#eee',
+    borderBottomColor: colors.divider,
   },
   tabItem: {
     paddingVertical: 15,
@@ -350,14 +355,14 @@ const styles = StyleSheet.create({
     borderBottomColor: 'transparent',
   },
   tabItemActive: {
-    borderBottomColor: '#1A4508',
+    borderBottomColor: colors.selected,
   },
   tabText: {
     fontSize: 16,
-    color: '#666',
+    color: colors.text,
   },
   tabTextActive: {
-    color: '#1A4508',
+    color: colors.selected,
     fontWeight: 'bold',
   },
   content: {
@@ -411,11 +416,11 @@ const styles = StyleSheet.create({
   },
   taxonomyRank: {
     fontSize: 10,
-    color: '#666',
+    color: colors.text,
     textTransform: 'uppercase',
   },
   taxonomyName: {
-    color: '#1A4508',
+    color: colors.selected,
     fontWeight: 'bold',
     fontSize: 16,
     fontStyle: 'italic',
@@ -424,14 +429,14 @@ const styles = StyleSheet.create({
     fontSize: 18,
     fontWeight: 'bold',
     marginBottom: 15,
-    color: '#1A4508',
+    color: colors.selected,
   },
   chartContainer: {
     height: 220,
-    backgroundColor: '#fff',
+    backgroundColor: colors.background,
     marginBottom: 20,
     borderWidth: 1,
-    borderColor: '#eee',
+    borderColor: colors.divider,
     padding: 10,
     paddingTop: 30,
   },
@@ -458,24 +463,24 @@ const styles = StyleSheet.create({
   monthLabel: {
     fontSize: 9,
     marginTop: 5,
-    color: '#666',
+    color: colors.text,
     textAlign: 'center',
   },
   monthLabelSelected: {
     fontWeight: 'bold',
-    color: '#1A4508',
+    color: colors.selected,
   },
   tooltip: {
     position: 'absolute',
     top: -25,
-    backgroundColor: '#1A4508',
+    backgroundColor: colors.selected,
     paddingHorizontal: 6,
     paddingVertical: 2,
     borderRadius: 4,
     zIndex: 10,
   },
   tooltipText: {
-    color: '#fff',
+    color: colors.background,
     fontSize: 10,
     fontWeight: 'bold',
   },
@@ -497,7 +502,7 @@ const styles = StyleSheet.create({
   },
   filterLabel: {
     fontWeight: 'bold',
-    color: '#1B1C1A',
+    color: colors.selected,
     marginBottom: 5,
     marginTop: 10,
   },
@@ -514,18 +519,18 @@ const styles = StyleSheet.create({
     flexDirection: 'row',
     justifyContent: 'space-between',
     alignItems: 'center',
-    backgroundColor: '#f9f9f9',
+    backgroundColor: colors.background,
   },
   disabledSelector: {
-    backgroundColor: '#eee',
+    backgroundColor: colors.divider,
     opacity: 0.7,
   },
   dropdownText: {
-    color: '#000',
+    color: colors.text,
     flex: 1,
   },
   placeholderText: {
-    color: '#999',
+    color: colors.placeHolder,
     flex: 1,
   },
   clearButton: {
@@ -538,7 +543,7 @@ const styles = StyleSheet.create({
     justifyContent: 'flex-end',
   },
   modalContent: {
-    backgroundColor: '#fff',
+    backgroundColor: colors.background,
     borderTopLeftRadius: 20,
     borderTopRightRadius: 20,
     height: '70%',
@@ -551,32 +556,33 @@ const styles = StyleSheet.create({
     marginBottom: 20,
     paddingBottom: 10,
     borderBottomWidth: 1,
-    borderBottomColor: '#eee',
+    borderBottomColor: colors.divider,
   },
   modalTitle: {
     fontSize: 18,
     fontWeight: 'bold',
-    color: '#1A4508',
+    color: colors.selected,
   },
   modalItem: {
     paddingVertical: 15,
     borderBottomWidth: 1,
-    borderBottomColor: '#f0f0f0',
+    borderBottomColor: colors.divider,
     flexDirection: 'row',
     justifyContent: 'space-between',
     alignItems: 'center',
   },
   modalItemText: {
     fontSize: 16,
-    color: '#333',
+    color: colors.text,
   },
   emptyListText: {
     textAlign: 'center',
-    color: '#999',
+    color: '#aaa',
     marginTop: 20,
   },
   searchInput: {
     height: 45,
+    padding: 10,
     borderColor: '#E0E0E0',
     backgroundColor: '#F5F5F5',
     borderWidth: 1,

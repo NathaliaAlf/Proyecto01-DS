@@ -1,7 +1,6 @@
 import { useClientOnlyValue } from '@/components/useClientOnlyValue';
-import { useColorScheme } from '@/components/useColorScheme';
-import Colors from '@/constants/Colors';
 import { useAuth } from '@/context/AuthContext';
+import { useTheme } from '@/context/ThemeContext';
 import { FontAwesome, FontAwesome5, Ionicons, MaterialIcons } from '@expo/vector-icons';
 import { Tabs, useRouter } from 'expo-router';
 import React, { useRef, useState } from 'react';
@@ -16,8 +15,8 @@ import {
   useWindowDimensions
 } from 'react-native';
 
+
 export default function TabLayout() {
-  const colorScheme = useColorScheme() ?? 'light';
   const [searchQuery, setSearchQuery] = useState('');
   const [isSearching, setIsSearching] = useState(false);
   const [isSearchFocused, setIsSearchFocused] = useState(false);
@@ -28,6 +27,9 @@ export default function TabLayout() {
 
   const SIDE_ELEMENTS_WIDTH = 400; 
   const availableWidth = Math.max(screenWidth - SIDE_ELEMENTS_WIDTH, 100);
+
+  const {colors, theme, toggleTheme} = useTheme();
+  const styles = createStyles(colors);
 
   const handleHeaderSearch = async () => {
     if (!searchQuery.trim()) return;
@@ -55,10 +57,15 @@ export default function TabLayout() {
     <Tabs
       screenOptions={{
 
-        tabBarActiveTintColor: Colors[colorScheme ?? "light"].tint,
+        tabBarActiveTintColor: colors.tint,
+        tabBarPosition: 'bottom',
+        tabBarStyle: {
+          backgroundColor: colors.background,
+          borderTopColor: colors.divider,
+        },
         headerShown: useClientOnlyValue(false, true),
         headerStyle: {
-          backgroundColor: Colors.light.tint,
+          backgroundColor: colors.tint,
         },
         headerShadowVisible: false,
         headerTitle: () => (
@@ -78,7 +85,7 @@ export default function TabLayout() {
                 ref={searchInputRef}
                 style={styles.searchInput}
                 placeholder="Ex: Sloth"
-                placeholderTextColor={Colors.light.tint}
+                placeholderTextColor={colors.tint}
                 value={searchQuery}
                 onChangeText={setSearchQuery}
                 onSubmitEditing={handleHeaderSearch}
@@ -86,8 +93,8 @@ export default function TabLayout() {
                 autoCorrect={false}
                 onFocus={() => setIsSearchFocused(true)}
                 onBlur={() => setIsSearchFocused(false)}
-                selectionColor={Colors.light.selected}
-                cursorColor={Colors.light.selected}
+                selectionColor={colors.selected}
+                cursorColor={colors.selected}
                 underlineColorAndroid="transparent"
                 blurOnSubmit={false}
                 textAlignVertical="center"
@@ -99,14 +106,14 @@ export default function TabLayout() {
                   style={styles.clearButton}
                   hitSlop={{ top: 10, bottom: 10, left: 10, right: 10 }}
                 >
-                  <MaterialIcons name="cancel" size={16} color={Colors.light.tint} />
+                  <MaterialIcons name="cancel" size={16} color={colors.tint} />
                 </TouchableOpacity>
               )}
               
               {isSearching && (
                 <ActivityIndicator 
                   size="small" 
-                  color={Colors.light.selected}
+                  color={colors.selected}
                   style={styles.searchLoader}
                 />
               )}
@@ -132,7 +139,11 @@ export default function TabLayout() {
           <View style={styles.headerLeft}>
             <TouchableOpacity>
               <Image
-                source={require("@/assets/images/logo.png")}
+                source={
+                  theme === 'dark'
+                  ? require("@/assets/images/logo_dark.png")
+                  : require("@/assets/images/logo.png")
+                }
                 style={styles.logo}
                 resizeMode="contain"
               />
@@ -142,7 +153,7 @@ export default function TabLayout() {
         headerRight: () => (
           <View style={styles.headerRightContainer}>
             
-            <TouchableOpacity>
+            <TouchableOpacity onPress={toggleTheme}>
               <FontAwesome name="adjust" style={styles.headerIcon} />
             </TouchableOpacity>
 
@@ -194,7 +205,9 @@ export default function TabLayout() {
   );
 }
 
-const styles = StyleSheet.create({
+const createStyles = (colors: any) =>
+
+  StyleSheet.create({
   center_header_container: {
     flexDirection: "row",
     alignItems: "center",
@@ -206,7 +219,7 @@ const styles = StyleSheet.create({
     flex: 1,
     flexDirection: 'row',
     alignItems: 'center',
-    backgroundColor: Colors.light.background,
+    backgroundColor: colors.background,
     borderRadius: 25,
     paddingHorizontal: 15,
     height: 40,
@@ -214,14 +227,14 @@ const styles = StyleSheet.create({
     minWidth: 100,
   },
   searchContainerFocused: {
-    backgroundColor: Colors.light.background,
+    backgroundColor: colors.background,
   },
   searchInput: {
     flex: 1,
     fontSize: 16,
     paddingVertical: Platform.OS === 'ios' ? 10 : 8,
     paddingHorizontal: 8,
-    color: Colors.light.selected,
+    color: colors.text,
     borderWidth: 0,
     borderColor: 'transparent',
     outlineWidth: 0,
@@ -238,7 +251,7 @@ const styles = StyleSheet.create({
   },
   filterIcon: {
     fontSize: 20,
-    color: 'white',
+    color: colors.background,
   },
   searchButton: {
     padding: 8,
@@ -246,7 +259,7 @@ const styles = StyleSheet.create({
   },
   searchIcon: {
     fontSize: 20,
-    color: 'white',
+    color: colors.background,
   },
   clearButton: {
     padding: 4,
@@ -271,7 +284,7 @@ const styles = StyleSheet.create({
   },
   headerIcon: {
     fontSize: 25,
-    color: 'white',
+    color: colors.background,
     margin: 5 
   },
   profile_picture_container: {
@@ -279,10 +292,10 @@ const styles = StyleSheet.create({
     height: 25,
     borderRadius: 13,
     overflow: 'hidden',
-    backgroundColor: 'white',
+    backgroundColor: colors.background,
   },
   profile_picture: {
     width: '100%',
     height: '100%',
   },
-});
+})
