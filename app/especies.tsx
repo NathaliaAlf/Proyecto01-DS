@@ -1,70 +1,153 @@
-// Update your SpeciesScreen to handle search from header
+/**
+ * SpeciesScreen
+ * -------------
+ * Pantalla encargada de:
+ * - Leer el texto de búsqueda desde la URL (params.search)
+ * - Escuchar cambios en los filtros (FilterContext)
+ * - Ejecutar la búsqueda en GBIF
+ * - Mostrar los resultados en formato galería (grid)
+ */
+import FilterOverlay from '@/components/FilterOverlay';
 import Colors from '@/constants/Colors';
-import { gbifService } from '@/services/gbifService';
-import { GBIFSpecies } from '@/services/gbifTypes';
-import { useLocalSearchParams } from 'expo-router';
-import { useEffect, useState } from 'react';
-import { ActivityIndicator, FlatList, StyleSheet, Text, TextInput, useColorScheme, View } from 'react-native';
+import { useFilters } from '@/context/FilterContext';
+import { gbifService, ImageItem } from '@/services/gbifService';
+import { LinearGradient } from 'expo-linear-gradient';
+import { useLocalSearchParams, useRouter } from 'expo-router';
+import React, { useEffect, useState } from 'react';
+import {
+  ActivityIndicator,
+  FlatList,
+  Image,
+  Pressable,
+  StyleSheet,
+  Text,
+  useColorScheme,
+  useWindowDimensions,
+  View,
+} from 'react-native';
+
+type GalleryItem = ImageItem & {
+  calculatedHeight: number;
+};
 
 export default function SpeciesScreen() {
-  const [query, setQuery] = useState('');
-  const [results, setResults] = useState<GBIFSpecies[]>([]);
+  const router = useRouter(); // Navegación entre pantallas
+  const colorScheme = useColorScheme() ?? 'light'; // Modo claro / oscuro
+  const params = useLocalSearchParams(); // Lee parámetros de la ruta (?search=...)
+  const { width } = useWindowDimensions(); // Para diseño responsive
+
+  // Obtenemos filtros y la función para cerrar el modal del contexto
+  const { filters, setIsFilterVisible } = useFilters(); 
+
+  const [results, setResults] = useState<GalleryItem[]>([]);
   const [loading, setLoading] = useState(false);
-  const colorScheme = useColorScheme() ?? 'light';
-  
-  // Get search parameter from navigation
-  const params = useLocalSearchParams();
-  const searchFromHeader = params.search as string;
 
-  // Effect to handle search from header
-  useEffect(() => {
-    if (searchFromHeader) {
-      setQuery(searchFromHeader);
-      performSearch(searchFromHeader);
-    }
-  }, [searchFromHeader]);
+  const numColumns = width > 1100 ? 5 : width > 700 ? 3 : 2;
+  const COLUMN_WIDTH = width / numColumns - 20;
 
-  const performSearch = async (searchTerm: string) => {
-    if (!searchTerm) return;
+  /**
+   * performSearch
+   * -------------
+   * Función central de búsqueda.
+   * Recibe el texto (query) y usa los filtros desde el contexto.
+   * Llama al servicio gbifService y transforma los resultados para la galería.
+   */
+  const performSearch = async (query: string) => { 
     setLoading(true);
     try {
-      const data = await gbifService.searchSpecies(searchTerm);
-      setResults(data.results);
-    } catch (error) {
-      console.error(error);
+      console.log("Enviando al servicio estos filtros:", filters);
+      
+      const images = await gbifService.searchOccurrencesByQuery(query, 0, filters);
+
+      const processed = images.map((img) => ({
+        ...img,
+        calculatedHeight: 220,
+      }));
+
+      setResults(processed);
+    } catch (e) {
+      console.error('Error en búsqueda:', e);
+      setResults([]);
     } finally {
       setLoading(false);
     }
   };
 
-  const handleSearch = async () => {
-    await performSearch(query);
-  };
+  /**
+   * useEffect
+   * ---------
+   * Se dispara cuando:
+   * - cambia el texto de búsqueda
+   * - cambian los filtros
+   * 
+   * Esto asegura que la búsqueda se actualice automáticamente.
+   */
+  useEffect(() => {
+    if (params.search) {
+      performSearch(params.search as string);
+    }
+  }, [params.search, filters]); 
 
   return (
-    <View style={styles.container}>
-      <Text style={styles.title}>Buscador de Especies GBIF</Text>
-      
-      <TextInput
-        style={[styles.input, { color: Colors[colorScheme].text, borderColor: Colors[colorScheme].tabIconDefault }]}
-        placeholder="Ej: Sloth"
-        placeholderTextColor="#888"
-        value={query}
-        onChangeText={setQuery}
-        onSubmitEditing={handleSearch}
+    <View style={[styles.container, { backgroundColor: Colors[colorScheme].background }]}>
+
+      <FilterOverlay 
+        onApply={() => {
+          setIsFilterVisible(false);
+          if (params.search) {
+            performSearch(params.search as string);
+          }
+        }} 
       />
 
+      <Text style={[styles.title, { color: Colors[colorScheme].text }]}>
+        Resultados: {params.search}
+      </Text>
+
       {loading ? (
-        <ActivityIndicator size="large" color={Colors[colorScheme].tint} />
+        <View style={styles.center}>
+          <ActivityIndicator size="large" color={Colors[colorScheme].tint} />
+        </View>
       ) : (
         <FlatList
+          key={numColumns}
           data={results}
-          keyExtractor={(item) => item.key.toString()}
+          numColumns={numColumns}
+          keyExtractor={(item) => item.id}
+          contentContainerStyle={styles.listPadding}
           renderItem={({ item }) => (
-            <View style={styles.itemCard}>
-              <Text style={styles.scientificName}>{item.scientificName}</Text>
-              <Text style={styles.details}>{item.kingdom} {'>'} {item.family}</Text>
-            </View>
+            <Pressable
+              onPress={() =>
+                router.push({
+                  pathname: '/DetailedDescription',
+                  params: {
+                    speciesKey: item.taxonKey,
+                    scientificName: item.scientificName,
+                  },
+                })
+              }
+              style={({ pressed }) => [
+                styles.card,
+                {
+                  height: item.calculatedHeight,
+                  maxWidth: COLUMN_WIDTH,
+                  opacity: pressed ? 0.85 : 1,
+                },
+              ]}
+            >
+              <Image source={{ uri: item.imageUrl }} style={styles.image} />
+              <LinearGradient
+                colors={['rgba(0,0,0,0.85)', 'transparent']}
+                start={{ x: 0, y: 1 }}
+                end={{ x: 0, y: 0.4 }}
+                style={styles.gradient}
+              />
+              <View style={styles.infoContainer}>
+                <Text style={styles.scientificName} numberOfLines={2}>
+                  {item.commonName || item.scientificName}
+                </Text>
+              </View>
+            </Pressable>
           )}
         />
       )}
@@ -73,10 +156,13 @@ export default function SpeciesScreen() {
 }
 
 const styles = StyleSheet.create({
-  container: { flex: 1, padding: 20, paddingTop: 60 },
-  title: { fontSize: 20, fontWeight: 'bold', marginBottom: 20 },
-  input: { height: 50, borderWidth: 1, borderRadius: 8, paddingHorizontal: 15, marginBottom: 20 },
-  itemCard: { padding: 15, borderBottomWidth: 1, borderBottomColor: '#ccc' },
-  scientificName: { fontSize: 16, fontWeight: '600' },
-  details: { fontSize: 12, opacity: 0.7 },
+  container: { flex: 1, paddingTop: 60 },
+  center: { flex: 1, justifyContent: 'center', alignItems: 'center' },
+  title: { fontSize: 22, fontWeight: 'bold', marginLeft: 20, marginBottom: 15 },
+  listPadding: { paddingHorizontal: 10, paddingBottom: 30 },
+  card: { margin: 8, borderRadius: 12, overflow: 'hidden', backgroundColor: '#222', flex: 1 },
+  image: { width: '100%', height: '100%', resizeMode: 'cover' },
+  gradient: { position: 'absolute', bottom: 0, left: 0, right: 0, height: '60%' },
+  infoContainer: { position: 'absolute', bottom: 0, left: 0, right: 0, padding: 12 },
+  scientificName: { color: '#fff', fontSize: 13, fontWeight: '600' },
 });
