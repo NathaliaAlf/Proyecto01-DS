@@ -7,7 +7,7 @@ import AntDesign from '@expo/vector-icons/AntDesign';
 import Ionicons from '@expo/vector-icons/Ionicons';
 import { LinearGradient } from 'expo-linear-gradient';
 import { useLocalSearchParams, useRouter } from 'expo-router';
-import React, { useEffect, useState } from 'react';
+import React, { useCallback, useEffect, useMemo, useState } from 'react';
 import {
     ActivityIndicator,
     Alert,
@@ -27,13 +27,147 @@ type ImageWithDimensions = ImageItem & {
   calculatedWidth: number;
 };
 
+// Helper function to process images with concurrency limit
+async function processImagesWithLimit(
+  images: ImageItem[], 
+  concurrencyLimit: number = 3
+): Promise<ImageWithDimensions[]> {
+  const results: ImageWithDimensions[] = [];
+  
+  for (let i = 0; i < images.length; i += concurrencyLimit) {
+    const batch = images.slice(i, i + concurrencyLimit);
+    
+    const batchResults = await Promise.all(
+      batch.map(async (img) => {
+        try {
+          return await new Promise<ImageWithDimensions>((resolve) => {
+            // Add timeout to prevent hanging connections
+            const timeoutId = setTimeout(() => {
+              console.warn(`Timeout getting size for ${img.scientificName}`);
+              resolve({
+                ...img,
+                calculatedWidth: IMAGE_SIZE
+              });
+            }, 5000);
+
+            Image.getSize(
+              img.imageUrl,
+              (imgWidth, imgHeight) => {
+                clearTimeout(timeoutId);
+                const aspectRatio = imgWidth / imgHeight;
+                const calculatedWidth = IMAGE_SIZE * aspectRatio;
+                
+                resolve({
+                  ...img,
+                  calculatedWidth: Math.max(calculatedWidth, 100)
+                });
+              },
+              (error) => {
+                clearTimeout(timeoutId);
+                console.error(`Failed to get size for ${img.scientificName}:`, error);
+                resolve({
+                  ...img,
+                  calculatedWidth: IMAGE_SIZE
+                });
+              }
+            );
+          });
+        } catch (error) {
+          console.error('Error processing image:', error);
+          return {
+            ...img,
+            calculatedWidth: IMAGE_SIZE
+          };
+        }
+      })
+    );
+    
+    results.push(...batchResults);
+    
+    // Longer delay between batches to prevent connection exhaustion
+    if (i + concurrencyLimit < images.length) {
+      await new Promise(resolve => setTimeout(resolve, 100));
+    }
+  }
+  
+  return results;
+}
+
+// Memoized grid item component
+const GridItem = React.memo<{
+  item: ImageWithDimensions;
+  isFavorite: boolean;
+  onPress: (speciesKey: number, scientificName: string) => void;
+  onLongPress: (e: any, speciesKey: number, scientificName: string, commonName: string | undefined, imageUrl: string) => void;
+  onContextMenu: (e: any, speciesKey: number, scientificName: string, commonName: string | undefined, imageUrl: string) => void;
+  styles: any;
+}>(({ item, isFavorite, onPress, onLongPress, onContextMenu, styles }) => {
+  const handlePress = useCallback(() => {
+    onPress(item.taxonKey, item.scientificName);
+  }, [item.taxonKey, item.scientificName, onPress]);
+
+  const handleLongPress = useCallback((e: any) => {
+    onLongPress(e, item.taxonKey, item.scientificName, item.commonName, item.imageUrl);
+  }, [item.taxonKey, item.scientificName, item.commonName, item.imageUrl, onLongPress]);
+
+  const handleContextMenu = useCallback((e: any) => {
+    onContextMenu(e, item.taxonKey, item.scientificName, item.commonName, item.imageUrl);
+  }, [item.taxonKey, item.scientificName, item.commonName, item.imageUrl, onContextMenu]);
+
+  return (
+    <Pressable
+      onPress={handlePress}
+      onLongPress={handleLongPress}
+      style={styles.gridItem}
+    >
+      {({ hovered }) => (
+        <View
+          style={styles.imageContainer}
+          // @ts-ignore
+          onContextMenu={handleContextMenu}
+        >
+          <Image
+            source={{ uri: item.imageUrl }}
+            style={styles.image}
+            resizeMode="cover"
+          />
+          <LinearGradient
+            colors={['rgba(0,0,0,0.8)', 'transparent']}
+            start={{ x: 0, y: 1 }}
+            end={{ x: 0, y: 0 }}
+            style={[styles.gradient, hovered && styles.gradientHovered]}
+          />
+          <View style={styles.nameContainer}>
+            <Text style={styles.speciesName} numberOfLines={2}>
+              {item.commonName || item.scientificName}
+            </Text>
+          </View>
+          
+          {isFavorite && (
+            <View style={styles.favoriteBadge}>
+              <AntDesign name="star" size={16} color="#FFE924" />
+            </View>
+          )}
+        </View>
+      )}
+    </Pressable>
+  );
+}, (prevProps, nextProps) => {
+  return (
+    prevProps.item.id === nextProps.item.id &&
+    prevProps.isFavorite === nextProps.isFavorite
+  );
+});
+
+GridItem.displayName = 'GridItem';
+
 export default function GalleryScreen() {
   const router = useRouter();
   const { taxonName } = useLocalSearchParams<{ taxonName: string }>();
   const { user } = useAuth();
   const { width: screenWidth } = useWindowDimensions();
   const { colors } = useTheme();
-  const styles = makeStyles(colors, screenWidth);
+  const styles = useMemo(() => makeStyles(colors, screenWidth), [colors, screenWidth]);
 
   const [images, setImages] = useState<ImageWithDimensions[]>([]);
   const [loading, setLoading] = useState(true);
@@ -51,10 +185,8 @@ export default function GalleryScreen() {
     isFavorite: boolean;
   } | null>(null);
 
-  // Calculate number of columns based on screen width
-  const numColumns = Math.floor(screenWidth / IMAGE_SIZE);
+  const numColumns = useMemo(() => Math.floor(screenWidth / IMAGE_SIZE), [screenWidth]);
 
-  // Load favorites
   useEffect(() => {
     const loadFavorites = async () => {
       if (!user) {
@@ -74,44 +206,6 @@ export default function GalleryScreen() {
     loadFavorites();
   }, [user]);
 
-  // Process images
-  const processImages = async (images: ImageItem[]): Promise<ImageWithDimensions[]> => {
-    return await Promise.all(
-      images.map(async (img) => {
-        try {
-          return await new Promise<ImageWithDimensions>((resolve) => {
-            Image.getSize(
-              img.imageUrl,
-              (imgWidth, imgHeight) => {
-                const aspectRatio = imgWidth / imgHeight;
-                const calculatedWidth = IMAGE_SIZE * aspectRatio;
-                
-                resolve({
-                  ...img,
-                  calculatedWidth: Math.max(calculatedWidth, 100)
-                });
-              },
-              (error) => {
-                console.error(`Failed to get size for ${img.scientificName}:`, error);
-                resolve({
-                  ...img,
-                  calculatedWidth: IMAGE_SIZE
-                });
-              }
-            );
-          });
-        } catch (error) {
-          console.error('Error processing image:', error);
-          return {
-            ...img,
-            calculatedWidth: IMAGE_SIZE
-          };
-        }
-      })
-    );
-  };
-
-  // Initial load
   useEffect(() => {
     const loadImages = async () => {
       if (!taxonName) return;
@@ -119,7 +213,7 @@ export default function GalleryScreen() {
       try {
         setLoading(true);
         const fetchedImages = await gbifService.getTaxonGroupImages(taxonName, 0);
-        const processedImages = await processImages(fetchedImages);
+        const processedImages = await processImagesWithLimit(fetchedImages, 3);
         setImages(processedImages);
         setOffset(100);
       } catch (error) {
@@ -133,8 +227,7 @@ export default function GalleryScreen() {
     loadImages();
   }, [taxonName]);
 
-  // Load more
-  const loadMore = async () => {
+  const loadMore = useCallback(async () => {
     if (loadingMore || !taxonName) return;
 
     try {
@@ -146,7 +239,7 @@ export default function GalleryScreen() {
         return;
       }
 
-      const processedNewImages = await processImages(newImages);
+      const processedNewImages = await processImagesWithLimit(newImages, 3);
       
       const existingKeys = new Set(images.map(img => img.taxonKey));
       const uniqueNewImages = processedNewImages.filter(
@@ -164,9 +257,9 @@ export default function GalleryScreen() {
     } finally {
       setLoadingMore(false);
     }
-  };
+  }, [loadingMore, taxonName, offset, images]);
 
-  const handleSpeciesPress = (speciesKey: number, scientificName: string) => {
+  const handleSpeciesPress = useCallback((speciesKey: number, scientificName: string) => {
     router.push({
       pathname: '/DetailedDescription',
       params: {
@@ -174,9 +267,9 @@ export default function GalleryScreen() {
         scientificName: scientificName
       }
     });
-  };
+  }, [router]);
 
-  const handleContextMenu = (event: any, speciesKey: number, scientificName: string, commonName: string | undefined, imageUrl: string) => {
+  const handleContextMenu = useCallback((event: any, speciesKey: number, scientificName: string, commonName: string | undefined, imageUrl: string) => {
     event.preventDefault();
     const isFavorite = favoriteKeys.has(speciesKey);
     
@@ -190,13 +283,13 @@ export default function GalleryScreen() {
       imageUrl,
       isFavorite
     });
-  };
+  }, [favoriteKeys]);
 
-  const closeContextMenu = () => {
+  const closeContextMenu = useCallback(() => {
     setContextMenu(null);
-  };
+  }, []);
 
-  const handleToggleFavorite = async () => {
+  const handleToggleFavorite = useCallback(async () => {
     if (!contextMenu || !user) {
       if (!user) {
         Alert.alert('Login Required', 'Please log in to manage favorites');
@@ -239,14 +332,36 @@ export default function GalleryScreen() {
     }
     
     closeContextMenu();
-  };
+  }, [contextMenu, user, closeContextMenu]);
 
-  const handleOpenDetails = () => {
+  const handleOpenDetails = useCallback(() => {
     if (contextMenu) {
       handleSpeciesPress(contextMenu.speciesKey, contextMenu.scientificName);
       closeContextMenu();
     }
-  };
+  }, [contextMenu, handleSpeciesPress, closeContextMenu]);
+
+  const keyExtractor = useCallback((item: ImageWithDimensions) => item.id, []);
+
+  const renderItem = useCallback(({ item }: { item: ImageWithDimensions }) => (
+    <GridItem
+      item={item}
+      isFavorite={favoriteKeys.has(item.taxonKey)}
+      onPress={handleSpeciesPress}
+      onLongPress={handleContextMenu}
+      onContextMenu={handleContextMenu}
+      styles={styles}
+    />
+  ), [favoriteKeys, handleSpeciesPress, handleContextMenu, styles]);
+
+  const ListFooterComponent = useMemo(() => {
+    if (!loadingMore) return null;
+    return (
+      <View style={styles.footerLoader}>
+        <ActivityIndicator size="small" color={colors.tint} />
+      </View>
+    );
+  }, [loadingMore, styles.footerLoader, colors.tint]);
 
   if (loading) {
     return (
@@ -258,7 +373,6 @@ export default function GalleryScreen() {
 
   return (
     <View style={styles.container}>
-      {/* Header */}
       <View style={styles.header}>
         <TouchableOpacity onPress={() => router.back()} style={styles.backButton}>
           <Ionicons name="arrow-back" size={24} color={colors.text} />
@@ -267,67 +381,22 @@ export default function GalleryScreen() {
         <View style={{ width: 40 }} />
       </View>
 
-      {/* Gallery Grid */}
       <FlatList
         data={images}
-        keyExtractor={(item) => item.id}
+        keyExtractor={keyExtractor}
         numColumns={numColumns}
         key={numColumns}
         contentContainerStyle={styles.gridContent}
         onEndReached={loadMore}
         onEndReachedThreshold={0.5}
-        ListFooterComponent={
-          loadingMore ? (
-            <View style={styles.footerLoader}>
-              <ActivityIndicator size="small" color={colors.tint} />
-            </View>
-          ) : null
-        }
-        renderItem={({ item }) => {
-          const isFavorite = favoriteKeys.has(item.taxonKey);
-          
-          return (
-            <Pressable
-              onPress={() => handleSpeciesPress(item.taxonKey, item.scientificName)}
-              onLongPress={(e) => handleContextMenu(e, item.taxonKey, item.scientificName, item.commonName, item.imageUrl)}
-              style={styles.gridItem}
-            >
-              {({ hovered }) => (
-                <View
-                  style={styles.imageContainer}
-                  // @ts-ignore - onContextMenu is web-only
-                  onContextMenu={(e) => handleContextMenu(e, item.taxonKey, item.scientificName, item.commonName, item.imageUrl)}
-                >
-                  <Image
-                    source={{ uri: item.imageUrl }}
-                    style={styles.image}
-                    resizeMode="cover"
-                  />
-                  <LinearGradient
-                    colors={['rgba(0,0,0,0.8)', 'transparent']}
-                    start={{ x: 0, y: 1 }}
-                    end={{ x: 0, y: 0 }}
-                    style={[styles.gradient, hovered && styles.gradientHovered]}
-                  />
-                  <View style={styles.nameContainer}>
-                    <Text style={styles.speciesName} numberOfLines={2}>
-                      {item.commonName || item.scientificName}
-                    </Text>
-                  </View>
-                  
-                  {isFavorite && (
-                    <View style={styles.favoriteBadge}>
-                      <AntDesign name="star" size={16} color="#FFE924" />
-                    </View>
-                  )}
-                </View>
-              )}
-            </Pressable>
-          );
-        }}
+        removeClippedSubviews={true}
+        maxToRenderPerBatch={10}
+        updateCellsBatchingPeriod={50}
+        windowSize={5}
+        ListFooterComponent={ListFooterComponent}
+        renderItem={renderItem}
       />
 
-      {/* Context Menu */}
       {contextMenu?.visible && (
         <>
           <Pressable style={styles.contextMenuBackdrop} onPress={closeContextMenu} />

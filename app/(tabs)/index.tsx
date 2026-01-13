@@ -1,5 +1,5 @@
-import Colors from '@/constants/Colors';
 import { useAuth } from '@/context/AuthContext';
+import { useTheme } from '@/context/ThemeContext';
 import { addToFavorites, getFavorites, removeFromFavorites } from '@/services/favoritesService';
 import { gbifService, ImageItem } from '@/services/gbifService';
 import AntDesign from '@expo/vector-icons/AntDesign';
@@ -9,7 +9,7 @@ import Ionicons from '@expo/vector-icons/Ionicons';
 import MaterialCommunityIcons from '@expo/vector-icons/MaterialCommunityIcons';
 import { LinearGradient } from 'expo-linear-gradient';
 import { useRouter } from 'expo-router';
-import React, { useEffect, useRef, useState } from 'react';
+import React, { useCallback, useEffect, useMemo, useRef, useState } from 'react';
 import {
   ActivityIndicator,
   Alert,
@@ -45,11 +45,159 @@ type SectionOffset = {
   [key: string]: number;
 };
 
+// Helper function to process images with concurrency limit
+async function processImagesWithLimit(
+  images: ImageItem[], 
+  concurrencyLimit: number = 3
+): Promise<ImageWithDimensions[]> {
+  const results: ImageWithDimensions[] = [];
+  
+  for (let i = 0; i < images.length; i += concurrencyLimit) {
+    const batch = images.slice(i, i + concurrencyLimit);
+    
+    const batchResults = await Promise.all(
+      batch.map(async (img) => {
+        try {
+          return await new Promise<ImageWithDimensions>((resolve) => {
+            // Add timeout to prevent hanging connections
+            const timeoutId = setTimeout(() => {
+              console.warn(`Timeout getting size for ${img.scientificName}`);
+              resolve({
+                ...img,
+                calculatedWidth: IMAGE_HEIGHT
+              });
+            }, 5000);
+
+            Image.getSize(
+              img.imageUrl,
+              (imgWidth, imgHeight) => {
+                clearTimeout(timeoutId);
+                const aspectRatio = imgWidth / imgHeight;
+                const calculatedWidth = IMAGE_HEIGHT * aspectRatio;
+                
+                resolve({
+                  ...img,
+                  width: imgWidth,
+                  height: imgHeight,
+                  calculatedWidth: Math.max(calculatedWidth, 60)
+                });
+              },
+              (error) => {
+                clearTimeout(timeoutId);
+                console.error(`Failed to get size for ${img.scientificName}:`, error);
+                resolve({
+                  ...img,
+                  calculatedWidth: IMAGE_HEIGHT
+                });
+              }
+            );
+          });
+        } catch (error) {
+          console.error('Error processing image:', error);
+          return {
+            ...img,
+            calculatedWidth: IMAGE_HEIGHT
+          };
+        }
+      })
+    );
+    
+    results.push(...batchResults);
+    
+    // Longer delay between batches to prevent connection exhaustion
+    if (i + concurrencyLimit < images.length) {
+      await new Promise(resolve => setTimeout(resolve, 100));
+    }
+  }
+  
+  return results;
+}
+
+// Memoized image item component
+const SpeciesImageItem = React.memo<{
+  item: ImageWithDimensions;
+  isFavorite: boolean;
+  screenWidth: number;
+  onPress: (speciesKey: number, scientificName: string) => void;
+  onLongPress: (e: any, speciesKey: number, scientificName: string, commonName: string | undefined, imageUrl: string) => void;
+  onContextMenu: (e: any, speciesKey: number, scientificName: string, commonName: string | undefined, imageUrl: string) => void;
+  colors: any;
+}>(({ item, isFavorite, screenWidth, onPress, onLongPress, onContextMenu, colors }) => {
+  const styles = useMemo(() => createImageItemStyles(screenWidth, colors), [screenWidth, colors]);
+  
+  const handlePress = useCallback(() => {
+    onPress(item.taxonKey, item.scientificName);
+  }, [item.taxonKey, item.scientificName, onPress]);
+
+  const handleLongPress = useCallback((e: any) => {
+    onLongPress(e, item.taxonKey, item.scientificName, item.commonName, item.imageUrl);
+  }, [item.taxonKey, item.scientificName, item.commonName, item.imageUrl, onLongPress]);
+
+  const handleContextMenu = useCallback((e: any) => {
+    onContextMenu(e, item.taxonKey, item.scientificName, item.commonName, item.imageUrl);
+  }, [item.taxonKey, item.scientificName, item.commonName, item.imageUrl, onContextMenu]);
+
+  return (
+    <View>
+      <Pressable 
+        onPress={handlePress}
+        onLongPress={handleLongPress}
+      >
+        {({hovered}) => (
+          <View 
+            style={[
+              styles.species_picture_container,
+              { width: item.calculatedWidth }
+            ]}
+            // @ts-ignore
+            onContextMenu={handleContextMenu}
+          >
+            <Image
+              source={{ uri: item.imageUrl }}
+              style={styles.species_picture}
+              resizeMode="cover"
+            />
+            <LinearGradient
+              colors={['rgba(0,0,0,0.9)', 'transparent']}
+              start={{ x: 0, y: 1 }}
+              end={{ x: 0, y: 0 }}
+              style={[
+                styles.gradient,
+                hovered && styles.gradient_hovered
+              ]}
+            />
+            <View style={styles.speciesNameContainer}>
+              <Text style={styles.speciesName} numberOfLines={2}>
+                {item.commonName || item.scientificName}
+              </Text>
+            </View>
+            
+            {isFavorite && (
+              <View style={styles.favoriteBadge}>
+                <AntDesign name="star" size={screenWidth < 375 ? 14 : 16} color="#FFE924" />
+              </View>
+            )}
+          </View>
+        )}
+      </Pressable>
+    </View>
+  );
+}, (prevProps, nextProps) => {
+  // Custom comparison function
+  return (
+    prevProps.item.id === nextProps.item.id &&
+    prevProps.isFavorite === nextProps.isFavorite &&
+    prevProps.screenWidth === nextProps.screenWidth
+  );
+});
+
+SpeciesImageItem.displayName = 'SpeciesImageItem';
+
 export default function HomeScreen() {
   const router = useRouter();
   const { user } = useAuth();
   const { width: screenWidth } = useWindowDimensions();
-  const isMobile = screenWidth < 768; // Hide arrows on mobile
+  const isMobile = screenWidth < 768;
   
   const [imagesBySection, setImagesBySection] = useState<Record<string, ImageWithDimensions[]>>({});
   const [loadingStates, setLoadingStates] = useState<SectionState>({});
@@ -68,26 +216,26 @@ export default function HomeScreen() {
   } | null>(null);
   const flatListRefs = useRef<Record<string, FlatList<any> | null>>({});
 
-  const styles = createStyles(screenWidth, isMobile);
+  const {colors} = useTheme();
+  const styles = useMemo(() => createStyles(screenWidth, isMobile, colors), [screenWidth, isMobile, colors]);
 
-  function getIcon(name: string){
+  const getIcon = useCallback((name: string) => {
     const iconSize = screenWidth < 375 ? 28 : 35;
     switch(name){
-      case "Animalia": return <MaterialCommunityIcons name="dog-side" size={iconSize} color={Colors.light.tint} />
-      case "Fungi":  return <MaterialCommunityIcons name="mushroom" size={iconSize} color={Colors.light.tint} />
-      case "Plantae": return <Entypo name="flower" size={iconSize} color={Colors.light.tint} />
-      case "Mollusca": return <MaterialCommunityIcons name="snail" size={iconSize} color={Colors.light.tint} />
-      case "Arthropoda": return <MaterialCommunityIcons name="spider" size={iconSize} color={Colors.light.tint} />
-      case "Insecta": return <FontAwesome6 name="mosquito" size={iconSize} color={Colors.light.tint} />
-      case "Magnoliopsida": return <Ionicons name="flower-sharp" size={iconSize} color={Colors.light.tint} />
-      case "Lepidoptera": return <MaterialCommunityIcons name="butterfly" size={iconSize} color={Colors.light.tint} />
-      case "Coleoptera": return <Ionicons name="bug-sharp" size={iconSize} color={Colors.light.tint} />
-      case "Tracheophyta": return <MaterialCommunityIcons name="forest" size={iconSize} color={Colors.light.tint} />
+      case "Animalia": return <MaterialCommunityIcons name="dog-side" size={iconSize} color={colors.selected} />
+      case "Fungi":  return <MaterialCommunityIcons name="mushroom" size={iconSize} color={colors.selected} />
+      case "Plantae": return <Entypo name="flower" size={iconSize} color={colors.selected} />
+      case "Mollusca": return <MaterialCommunityIcons name="snail" size={iconSize} color={colors.selected} />
+      case "Arthropoda": return <MaterialCommunityIcons name="spider" size={iconSize} color={colors.selected} />
+      case "Insecta": return <FontAwesome6 name="mosquito" size={iconSize} color={colors.selected} />
+      case "Magnoliopsida": return <Ionicons name="flower-sharp" size={iconSize} color={colors.selected} />
+      case "Lepidoptera": return <MaterialCommunityIcons name="butterfly" size={iconSize} color={colors.selected} />
+      case "Coleoptera": return <Ionicons name="bug-sharp" size={iconSize} color={colors.selected} />
+      case "Tracheophyta": return <MaterialCommunityIcons name="forest" size={iconSize} color={colors.selected} />
       default: return null;
     }
-  }
+  }, [screenWidth, colors.selected]);
 
-  // Load favorites
   useEffect(() => {
     const loadFavorites = async () => {
       if (!user) {
@@ -107,46 +255,6 @@ export default function HomeScreen() {
     loadFavorites();
   }, [user]);
 
-  // Process images to calculate their width
-  const processImages = async (images: ImageItem[]): Promise<ImageWithDimensions[]> => {
-    return await Promise.all(
-      images.map(async (img) => {
-        try {
-          return await new Promise<ImageWithDimensions>((resolve) => {
-            Image.getSize(
-              img.imageUrl,
-              (imgWidth, imgHeight) => {
-                const aspectRatio = imgWidth / imgHeight;
-                const calculatedWidth = IMAGE_HEIGHT * aspectRatio;
-                
-                resolve({
-                  ...img,
-                  width: imgWidth,
-                  height: imgHeight,
-                  calculatedWidth: Math.max(calculatedWidth, 60)
-                });
-              },
-              (error) => {
-                console.error(`Failed to get size for ${img.scientificName}:`, error);
-                resolve({
-                  ...img,
-                  calculatedWidth: IMAGE_HEIGHT
-                });
-              }
-            );
-          });
-        } catch (error) {
-          console.error('Error processing image:', error);
-          return {
-            ...img,
-            calculatedWidth: IMAGE_HEIGHT
-          };
-        }
-      })
-    );
-  };
-
-  // Initial load
   useEffect(() => {
     const loadImages = async () => {
       const newLoadingStates: SectionState = {};
@@ -160,25 +268,32 @@ export default function HomeScreen() {
       setLoadingStates(newLoadingStates);
       setOffsetBySection(newOffsets);
 
-      const results: Record<string, ImageWithDimensions[]> = {};
-
       for (const section of sections) {
-        const images = await gbifService.getTaxonGroupImages(section, 0);
-        const processedImages = await processImages(images);
-        
-        results[section] = processedImages;
-        setLoadingStates(prev => ({ ...prev, [section]: false }));
-        setOffsetBySection(prev => ({ ...prev, [section]: 100 }));
+        try {
+          const images = await gbifService.getTaxonGroupImages(section, 0);
+          const processedImages = await processImagesWithLimit(images, 3);
+          
+          setImagesBySection(prev => ({
+            ...prev,
+            [section]: processedImages
+          }));
+          
+          setLoadingStates(prev => ({ ...prev, [section]: false }));
+          setOffsetBySection(prev => ({ ...prev, [section]: 100 }));
+          
+          // Longer delay between sections to prevent connection exhaustion
+          await new Promise(resolve => setTimeout(resolve, 200));
+        } catch (error) {
+          console.error(`Error loading images for ${section}:`, error);
+          setLoadingStates(prev => ({ ...prev, [section]: false }));
+        }
       }
-
-      setImagesBySection(results);
     };
 
     loadImages();
   }, []);
 
-  // Load more images for a specific section
-  const loadMoreImages = async (section: string) => {
+  const loadMoreImages = useCallback(async (section: string) => {
     if (loadingMoreStates[section]) {
       return;
     }
@@ -194,7 +309,7 @@ export default function HomeScreen() {
         return;
       }
       
-      const processedNewImages = await processImages(newImages);
+      const processedNewImages = await processImagesWithLimit(newImages, 3);
       
       const existingKeys = new Set(
         imagesBySection[section]?.map(img => img.taxonKey) || []
@@ -225,13 +340,9 @@ export default function HomeScreen() {
     } finally {
       setLoadingMoreStates(prev => ({ ...prev, [section]: false }));
     }
-  };
+  }, [loadingMoreStates, offsetBySection, imagesBySection]);
 
-  const handleImageError = (section: string, index: number) => {
-    console.log(`Failed to load image for ${section} at index ${index}`);
-  };
-
-  const handleSpeciesPress = (speciesKey: number, scientificName: string) => {
+  const handleSpeciesPress = useCallback((speciesKey: number, scientificName: string) => {
     router.push({
       pathname: '/DetailedDescription',
       params: {
@@ -239,9 +350,9 @@ export default function HomeScreen() {
         scientificName: scientificName
       }
     });
-  };
+  }, [router]);
 
-  const handleContextMenu = (event: any, speciesKey: number, scientificName: string, commonName: string | undefined, imageUrl: string) => {
+  const handleContextMenu = useCallback((event: any, speciesKey: number, scientificName: string, commonName: string | undefined, imageUrl: string) => {
     event.preventDefault();
     const isFavorite = favoriteKeys.has(speciesKey);
     
@@ -255,13 +366,13 @@ export default function HomeScreen() {
       imageUrl,
       isFavorite
     });
-  };
+  }, [favoriteKeys]);
 
-  const closeContextMenu = () => {
+  const closeContextMenu = useCallback(() => {
     setContextMenu(null);
-  };
+  }, []);
 
-  const handleToggleFavorite = async () => {
+  const handleToggleFavorite = useCallback(async () => {
     if (!contextMenu || !user) {
       if (!user) {
         Alert.alert('Login Required', 'Please log in to manage favorites');
@@ -272,7 +383,6 @@ export default function HomeScreen() {
 
     try {
       if (contextMenu.isFavorite) {
-        // Remove from favorites
         const success = await removeFromFavorites(user.uid, contextMenu.speciesKey);
         
         if (success) {
@@ -288,7 +398,6 @@ export default function HomeScreen() {
           );
         }
       } else {
-        // Add to favorites
         const success = await addToFavorites(user.uid, {
           speciesKey: contextMenu.speciesKey,
           scientificName: contextMenu.scientificName,
@@ -313,9 +422,9 @@ export default function HomeScreen() {
     }
     
     closeContextMenu();
-  };
+  }, [contextMenu, user, closeContextMenu]);
 
-  const handleOpenDetails = () => {
+  const handleOpenDetails = useCallback(() => {
     if (contextMenu) {
       router.push({
         pathname: '/DetailedDescription',
@@ -326,17 +435,25 @@ export default function HomeScreen() {
       });
       closeContextMenu();
     }
-  };
+  }, [contextMenu, router, closeContextMenu]);
 
-  const renderFooter = (section: string) => {
+  const renderFooter = useCallback((section: string) => {
     if (!loadingMoreStates[section]) return null;
     
     return (
       <View style={styles.footerLoader}>
-        <ActivityIndicator size="small" color={Colors.light.tint} />
+        <ActivityIndicator size="small" color={colors.tint} />
       </View>
     );
-  };
+  }, [loadingMoreStates, styles.footerLoader, colors.tint]);
+
+  const keyExtractor = useCallback((item: ImageWithDimensions) => item.id, []);
+
+  const getItemLayout = useCallback((data: ImageWithDimensions[] | null | undefined, index: number) => ({
+    length: IMAGE_HEIGHT,
+    offset: IMAGE_HEIGHT * index,
+    index,
+  }), []);
 
   return (
     <View style={styles.container}>
@@ -363,7 +480,6 @@ export default function HomeScreen() {
             </View>
 
             <View style={styles.section}>
-              {/* Left arrow - only show on larger screens */}
               {!isMobile && (
                 <TouchableOpacity
                   style={styles.arrow_container}
@@ -384,84 +500,47 @@ export default function HomeScreen() {
               ]}>
                 {loadingStates[element] ? (
                   <View style={styles.loadingContainer}>
-                    <ActivityIndicator size="small" color={Colors.light.tint} />
+                    <ActivityIndicator size="small" color={colors.tint} />
                   </View>
                 ) : (
                   <FlatList
                     horizontal
                     data={imagesBySection[element] ?? []}
-                    keyExtractor={(item) => item.id}
+                    keyExtractor={keyExtractor}
                     ref={(ref) => {
                       if (ref) {
                         flatListRefs.current[element] = ref;
                       }
                     }}
-                    showsHorizontalScrollIndicator={!isMobile} // Show scroll indicator on mobile
+                    showsHorizontalScrollIndicator={false}
                     contentContainerStyle={styles.flatListContent}
                     onEndReached={() => loadMoreImages(element)}
                     onEndReachedThreshold={0.5}
+                    removeClippedSubviews={true}
+                    maxToRenderPerBatch={10}
+                    updateCellsBatchingPeriod={50}
+                    windowSize={5}
                     ListEmptyComponent={
                       <View style={styles.emptyContainer}>
                         <Text style={styles.emptyText}>No images available</Text>
                       </View>
                     }
                     ListFooterComponent={renderFooter(element)}
-                    renderItem={({ item, index }) => {
-                      const isFavorite = favoriteKeys.has(item.taxonKey);
-                      
-                      return (
-                        <View>
-                          <Pressable 
-                            onPress={() => handleSpeciesPress(item.taxonKey, item.scientificName)}
-                            onLongPress={(e) => handleContextMenu(e, item.taxonKey, item.scientificName, item.commonName, item.imageUrl)}
-                          >
-                            {({hovered}) => (
-                              <View 
-                                style={[
-                                  styles.species_picture_container,
-                                  { width: item.calculatedWidth }
-                                ]}
-                                // @ts-ignore - onContextMenu is web-only
-                                onContextMenu={(e) => handleContextMenu(e, item.taxonKey, item.scientificName, item.commonName, item.imageUrl)}
-                              >
-                                <Image
-                                  source={{ uri: item.imageUrl }}
-                                  style={styles.species_picture}
-                                  resizeMode="cover"
-                                  onError={() => handleImageError(element, index)}
-                                />
-                                <LinearGradient
-                                  colors={['rgba(0,0,0,0.9)', 'transparent']}
-                                  start={{ x: 0, y: 1 }}
-                                  end={{ x: 0, y: 0 }}
-                                  style={[
-                                    styles.gradient,
-                                    hovered && styles.gradient_hovered
-                                  ]}
-                                />
-                                <View style={styles.speciesNameContainer}>
-                                  <Text style={styles.speciesName} numberOfLines={2}>
-                                    {item.commonName || item.scientificName}
-                                  </Text>
-                                </View>
-                                
-                                {/* Favorite badge */}
-                                {isFavorite && (
-                                  <View style={styles.favoriteBadge}>
-                                    <AntDesign name="star" size={screenWidth < 375 ? 14 : 16} color="#FFE924" />
-                                  </View>
-                                )}
-                              </View>
-                            )}
-                          </Pressable>
-                        </View>
-                      );
-                    }}
+                    renderItem={({ item }) => (
+                      <SpeciesImageItem
+                        item={item}
+                        isFavorite={favoriteKeys.has(item.taxonKey)}
+                        screenWidth={screenWidth}
+                        onPress={handleSpeciesPress}
+                        onLongPress={handleContextMenu}
+                        onContextMenu={handleContextMenu}
+                        colors={colors}
+                      />
+                    )}
                   />
                 )}
               </View>
 
-              {/* Right arrow - only show on larger screens */}
               {!isMobile && (
                 <TouchableOpacity
                   style={styles.arrow_container}
@@ -479,7 +558,6 @@ export default function HomeScreen() {
         ))}
       </ScrollView>
 
-      {/* Context Menu */}
       {contextMenu?.visible && (
         <>
           <Pressable 
@@ -496,7 +574,7 @@ export default function HomeScreen() {
               style={styles.contextMenuItem}
               onPress={handleOpenDetails}
             >
-              <Ionicons name="information-circle-outline" size={20} color={Colors.light.text} />
+              <Ionicons name="information-circle-outline" size={20} color={colors.text} />
               <Text style={styles.contextMenuText}>View Details</Text>
             </TouchableOpacity>
             
@@ -512,7 +590,7 @@ export default function HomeScreen() {
               <Ionicons 
                 name={contextMenu.isFavorite ? "trash" : "heart-outline"} 
                 size={20} 
-                color={contextMenu.isFavorite ? "#e74c3c" : Colors.light.text} 
+                color={contextMenu.isFavorite ? "#e74c3c" : colors.text} 
               />
               <Text 
                 style={[
@@ -530,50 +608,12 @@ export default function HomeScreen() {
   );
 }
 
-const createStyles = (screenWidth: number, isMobile: boolean) => StyleSheet.create({
-  container: {
-    flex: 1,
-    backgroundColor: '#fff',
-  },
-  sectionContainer: {
-    marginBottom: 20,
-  },
-  section: {
-    flexDirection: "row",
-    alignItems: "center",
-    minHeight: 120,
-  },
-  content: {
-    flex: 1,
-  },
-  section_title_container: {
-    flexDirection: "row",
-    marginHorizontal: screenWidth < 375 ? 20 : screenWidth < 414 ? 24 : 30, // Responsive margins
-    marginVertical: 12,
-    borderBottomWidth: 3,
-    borderBottomColor: "#44444445",
-    alignItems: "center",
-    paddingBottom: 10,
-  },
-  section_title: {
-    fontSize: screenWidth < 375 ? 28 : screenWidth < 414 ? 32 : 35,
-    fontWeight: "600",
-    color: Colors.light.selected,
-    marginLeft: 10,
-  },
-  section_title_hovered: {
-    textDecorationLine: "underline"
-  },
-  species_pics_row_container: {
-    flex: 1,
-    height: IMAGE_HEIGHT,
-    marginVertical: 10,
-  },
+const createImageItemStyles = (screenWidth: number, colors: any) => StyleSheet.create({
   species_picture_container: {
     height: IMAGE_HEIGHT,
     marginHorizontal: 6,
     overflow: 'hidden',
-    backgroundColor: Colors.light.background,
+    backgroundColor: colors.background,
     borderRadius: 8,
     shadowColor: "#000",
     shadowOffset: {
@@ -628,9 +668,50 @@ const createStyles = (screenWidth: number, isMobile: boolean) => StyleSheet.crea
     backgroundColor: 'rgba(0,0,0,0.3)',
     borderRadius: screenWidth < 375 ? 13 : 15,
   },
+});
+
+const createStyles = (screenWidth: number, isMobile: boolean, colors: any) => StyleSheet.create({
+  container: {
+    flex: 1,
+    backgroundColor: colors.background,
+  },
+  sectionContainer: {
+    marginBottom: 20,
+  },
+  section: {
+    flexDirection: "row",
+    alignItems: "center",
+    minHeight: 120,
+  },
+  content: {
+    flex: 1,
+  },
+  section_title_container: {
+    flexDirection: "row",
+    marginHorizontal: screenWidth < 375 ? 20 : screenWidth < 414 ? 24 : 30,
+    marginVertical: 12,
+    borderBottomWidth: 3,
+    borderBottomColor: "#44444445",
+    alignItems: "center",
+    paddingBottom: 10,
+  },
+  section_title: {
+    fontSize: screenWidth < 375 ? 28 : screenWidth < 414 ? 32 : 35,
+    fontWeight: "600",
+    color: colors.selected,
+    marginLeft: 10,
+  },
+  section_title_hovered: {
+    textDecorationLine: "underline"
+  },
+  species_pics_row_container: {
+    flex: 1,
+    height: IMAGE_HEIGHT,
+    marginVertical: 10,
+  },
   arrow: {
     fontSize: screenWidth < 414 ? 36 : 40,
-    color: Colors.light.selected,
+    color: colors.selected,
   },
   arrow_container: {
     width: screenWidth < 414 ? 80 : 100,
@@ -655,7 +736,7 @@ const createStyles = (screenWidth: number, isMobile: boolean) => StyleSheet.crea
     paddingHorizontal: 20,
   },
   emptyText: {
-    color: Colors.light.tabIconDefault,
+    color: colors.tabIconDefault,
     fontStyle: "italic",
   },
   footerLoader: {
@@ -700,7 +781,7 @@ const createStyles = (screenWidth: number, isMobile: boolean) => StyleSheet.crea
   },
   contextMenuText: {
     fontSize: 15,
-    color: Colors.light.text,
+    color: colors.text,
     fontWeight: '500',
   },
   contextMenuTextDanger: {

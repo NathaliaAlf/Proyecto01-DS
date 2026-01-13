@@ -36,6 +36,7 @@ export default function TabLayout() {
   const searchInputRef = useRef<TextInput>(null);
   const menuButtonRef = useRef<React.ComponentRef<typeof TouchableOpacity>>(null);
   const languageButtonRef = useRef<React.ComponentRef<typeof TouchableOpacity>>(null);
+  const profileButtonRef = useRef<React.ComponentRef<typeof TouchableOpacity>>(null);
 
   const { width: screenWidth } = useWindowDimensions();
   const isMobile = screenWidth < 768;
@@ -81,15 +82,29 @@ export default function TabLayout() {
   };
 
   const handleMainMenuPress = () => {
-    (menuButtonRef.current as any)?.measure?.(
-      (x: number, y: number, width: number, height: number, pageX: number, pageY: number) => {
-        setMenuPosition({
-          x: Math.min(pageX - 50, screenWidth - 250),
-          y: pageY + height + 5,
-        });
-        setShowMainMenu(true);
-      }
-    );
+    if (isMobile) {
+      // For mobile, measure the hamburger menu position
+      (menuButtonRef.current as any)?.measure?.(
+        (x: number, y: number, width: number, height: number, pageX: number, pageY: number) => {
+          setMenuPosition({
+            x: Math.min(pageX - 50, screenWidth - 250),
+            y: pageY + height + 5,
+          });
+          setShowMainMenu(true);
+        }
+      );
+    } else {
+      // For desktop, measure the profile button position
+      (profileButtonRef.current as any)?.measure?.(
+        (x: number, y: number, width: number, height: number, pageX: number, pageY: number) => {
+          setMenuPosition({
+            x: Math.min(pageX - 50, screenWidth - 250),
+            y: pageY + height + 5,
+          });
+          setShowMainMenu(true);
+        }
+      );
+    }
   };
   
   const handleLanguagePress = () => {
@@ -172,46 +187,42 @@ export default function TabLayout() {
               )}
               
               <View style={styles.menuItemsContainer}>
-                {/* Theme toggle */}
-                <TouchableOpacity 
-                  style={styles.menuItem}
-                  onPress={() => {
-                    toggleTheme();
-                    closeAllMenus();
-                  }}
-                >
-                  <FontAwesome name="adjust" size={20} color={colors.text} />
-                  <Text style={styles.menuItemText}>
-                    {theme === 'dark' ? t('lightMode') : t('darkMode')}
-                  </Text>
-                </TouchableOpacity>
-                
-                <View style={styles.menuDivider} />
-                
-                {/* Language option */}
-                <TouchableOpacity 
-                  style={styles.menuItem}
-                  onPress={() => {
-                    closeAllMenus();
-                    // On mobile, show language options inline
-                    if (isMobile) {
-                      // For mobile, we'll handle language change directly
-                      // You could show another menu or implement inline selection
-                      const newLocale = locale === 'en' ? 'es' : 'en';
-                      changeLanguage(newLocale);
-                    } else {
-                      // On desktop, trigger the separate language menu
-                      handleLanguagePress();
-                    }
-                  }}
-                >
-                  <MaterialIcons name="translate" size={20} color={colors.text} />
-                  <Text style={styles.menuItemText}>
-                    {locale === 'en' ? 'Español' : 'English'}
-                  </Text>
-                </TouchableOpacity>
-                
-                <View style={styles.menuDivider} />
+                {/* On mobile, show theme toggle in menu */}
+                {isMobile && (
+                  <>
+                    <TouchableOpacity 
+                      style={styles.menuItem}
+                      onPress={() => {
+                        toggleTheme();
+                        closeAllMenus();
+                      }}
+                    >
+                      <FontAwesome name="adjust" size={20} color={colors.text} />
+                      <Text style={styles.menuItemText}>
+                        {theme === 'dark' ? t('lightMode') : t('darkMode')}
+                      </Text>
+                    </TouchableOpacity>
+                    
+                    <View style={styles.menuDivider} />
+                    
+                    {/* Language option for mobile */}
+                    <TouchableOpacity 
+                      style={styles.menuItem}
+                      onPress={() => {
+                        const newLocale = locale === 'en' ? 'es' : 'en';
+                        changeLanguage(newLocale);
+                        closeAllMenus();
+                      }}
+                    >
+                      <MaterialIcons name="translate" size={20} color={colors.text} />
+                      <Text style={styles.menuItemText}>
+                        {locale === 'en' ? 'Español' : 'English'}
+                      </Text>
+                    </TouchableOpacity>
+                    
+                    <View style={styles.menuDivider} />
+                  </>
+                )}
                 
                 {/* Logout option - only show if logged in */}
                 {user && (
@@ -430,6 +441,7 @@ export default function TabLayout() {
                   </TouchableOpacity>
 
                   <TouchableOpacity 
+                    ref={profileButtonRef}
                     onPress={handleMainMenuPress}
                     style={styles.profileButton}
                     hitSlop={{ top: 10, bottom: 10, left: 10, right: 10 }}
