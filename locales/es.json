@@ -46,5 +46,43 @@
     "oct": "Oct",
     "nov": "Nov",
     "dec": "Dic"
+  },
+  "filters": {
+    "title": "Filtros Avanzados",
+    "rank": "Rango",
+    "status": "Estado",
+    "higherTaxon": "Taxón Superior",
+    "issues": "Problemas y Banderas",
+    "clearAll": "Limpiar Todo",
+    "apply": "Aplicar Filtros",
+    "ranks": {
+      "SPECIES": "Especie",
+      "UNRANKED": "Sin rango",
+      "GENUS": "Género",
+      "VARIETY": "Variedad",
+      "SUBSPECIES": "Subespecie",
+      "FORM": "Forma",
+      "FAMILY": "Familia",
+      "ORDER": "Orden",
+      "CLASS": "Clase",
+      "PHYLUM": "Filo",
+      "KINGDOM": "Reino"
+    },
+    "statuses": {
+      "ACCEPTED": "Aceptado",
+      "SYNONYM": "Sinónimo",
+      "DOUBTFUL": "Dudoso",
+      "HOMOTYPIC_SYNONYM": "Sinónimo homotípico",
+      "HETEROTYPIC_SYNONYM": "Sinónimo heterotípico",
+      "PROPARTE_SYNONYM": "Sinónimo en parte"
+    },
+    "issuesList": {
+      "BASIONYM_RELATION_DERIVED": "Relación de basónimo derivada",
+      "NAME_PARENT_MISMATCH": "El nombre no coincide con el padre",
+      "NO_SPECIES_INCLUDED": "No hay especies incluidas",
+      "CONFLICTING_BASIONYM_COMBINATION": "Combinación de basónimo conflictiva",
+      "ORTHOGRAPHIC_VARIANT": "Variante ortográfica",
+      "PUBLISHED_BEFORE_PARENT_NAME": "Publicado antes que el nombre del padre"
+    }
   }
 }

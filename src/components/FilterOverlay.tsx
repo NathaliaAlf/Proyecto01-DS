@@ -12,6 +12,7 @@
  */
 
 import { useFilters } from '@/context/FilterContext';
+import { useLanguage } from '@/context/LanguageContext';
 import { Ionicons } from '@expo/vector-icons';
 import React from 'react';
 import { Modal, ScrollView, StyleSheet, Text, TouchableOpacity, View } from 'react-native';
@@ -19,12 +20,12 @@ import { Modal, ScrollView, StyleSheet, Text, TouchableOpacity, View } from 'rea
 const RANKS = ['SPECIES', 'UNRANKED', 'GENUS', 'VARIETY', 'SUBSPECIES', 'FORM', 'FAMILY', 'ORDER', 'CLASS', 'PHYLUM', 'KINGDOM'];
 
 const STATUSES = [
-  { label: 'Accepted', value: 'ACCEPTED' },
-  { label: 'Synonym', value: 'SYNONYM' },
-  { label: 'Doubtful', value: 'DOUBTFUL' },
-  { label: 'Homotypic synonym', value: 'HOMOTYPIC_SYNONYM' },
-  { label: 'Heterotypic synonym', value: 'HETEROTYPIC_SYNONYM' },
-  { label: 'Proparte synonym', value: 'PROPARTE_SYNONYM' },
+  { labelKey: 'ACCEPTED', value: 'ACCEPTED' },
+  { labelKey: 'SYNONYM', value: 'SYNONYM' },
+  { labelKey: 'DOUBTFUL', value: 'DOUBTFUL' },
+  { labelKey: 'HOMOTYPIC_SYNONYM', value: 'HOMOTYPIC_SYNONYM' },
+  { labelKey: 'HETEROTYPIC_SYNONYM', value: 'HETEROTYPIC_SYNONYM' },
+  { labelKey: 'PROPARTE_SYNONYM', value: 'PROPARTE_SYNONYM' },
 ];
 
 const HIGHER_TAXA = [
@@ -41,16 +42,17 @@ const HIGHER_TAXA = [
 ];
 
 const ISSUES = [
-  { label: 'Basionym relation derived', value: 'BASIONYM_RELATION_DERIVED' },
-  { label: 'Name parent mismatch', value: 'NAME_PARENT_MISMATCH' },
-  { label: 'No species included', value: 'NO_SPECIES_INCLUDED' },
-  { label: 'Conflicting basionym combination', value: 'CONFLICTING_BASIONYM_COMBINATION' },
-  { label: 'Orthographic variant', value: 'ORTHOGRAPHIC_VARIANT' },
-  { label: 'Published earlier than parent name', value: 'PUBLISHED_BEFORE_PARENT_NAME' },
+  { labelKey: 'BASIONYM_RELATION_DERIVED', value: 'BASIONYM_RELATION_DERIVED' },
+  { labelKey: 'NAME_PARENT_MISMATCH', value: 'NAME_PARENT_MISMATCH' },
+  { labelKey: 'NO_SPECIES_INCLUDED', value: 'NO_SPECIES_INCLUDED' },
+  { labelKey: 'CONFLICTING_BASIONYM_COMBINATION', value: 'CONFLICTING_BASIONYM_COMBINATION' },
+  { labelKey: 'ORTHOGRAPHIC_VARIANT', value: 'ORTHOGRAPHIC_VARIANT' },
+  { labelKey: 'PUBLISHED_BEFORE_PARENT_NAME', value: 'PUBLISHED_BEFORE_PARENT_NAME' },
 ];
 
 export default function FilterOverlay({ onApply }: { onApply: () => void }) {
   const { filters, setFilters, isFilterVisible, setIsFilterVisible, clearFilters } = useFilters();
+  const { t } = useLanguage();
 
   const handleSelectRank = (val: string) => {
     setFilters({ ...filters, rank: filters.rank === val ? undefined : val });
@@ -83,7 +85,7 @@ export default function FilterOverlay({ onApply }: { onApply: () => void }) {
       <View style={styles.overlay}>
         <View style={styles.menu}>
           <View style={styles.header}>
-            <Text style={styles.title}>Filtros Avanzados</Text>
+            <Text style={styles.title}>{t('filters.title')}</Text>
             <TouchableOpacity onPress={() => setIsFilterVisible(false)}>
               <Ionicons name="close" size={28} color="#333" />
             </TouchableOpacity>
@@ -92,11 +94,11 @@ export default function FilterOverlay({ onApply }: { onApply: () => void }) {
           <ScrollView showsVerticalScrollIndicator={false}>
             <View style={styles.grid}>
               <View style={styles.column}>
-                <Text style={styles.sectionTitle}>Rank</Text>
+                <Text style={styles.sectionTitle}>{t('filters.rank')}</Text>
                 {RANKS.map(r => (
                   <FilterOption 
                     key={r} 
-                    label={r.charAt(0) + r.slice(1).toLowerCase()} 
+                    label={t(`filters.ranks.${r}`)} 
                     selected={filters.rank === r} 
                     onPress={() => handleSelectRank(r)} 
                   />
@@ -104,11 +106,11 @@ export default function FilterOverlay({ onApply }: { onApply: () => void }) {
               </View>
 
               <View style={styles.column}>
-                <Text style={styles.sectionTitle}>Status</Text>
+                <Text style={styles.sectionTitle}>{t('filters.status')}</Text>
                 {STATUSES.map(s => (
                   <FilterOption 
                     key={s.value} 
-                    label={s.label} 
+                    label={t(`filters.statuses.${s.labelKey}`)} 
                     selected={filters.status === s.value} 
                     onPress={() => handleSelectStatus(s.value)} 
                   />
@@ -116,7 +118,7 @@ export default function FilterOverlay({ onApply }: { onApply: () => void }) {
               </View>
 
               <View style={styles.column}>
-                <Text style={styles.sectionTitle}>Higher Taxon</Text>
+                <Text style={styles.sectionTitle}>{t('filters.higherTaxon')}</Text>
                 {HIGHER_TAXA.map(t => (
                   <FilterOption 
                     key={t.key} 
@@ -128,11 +130,11 @@ export default function FilterOverlay({ onApply }: { onApply: () => void }) {
               </View>
 
               <View style={styles.column}>
-                <Text style={styles.sectionTitle}>Issues and Flags</Text>
+                <Text style={styles.sectionTitle}>{t('filters.issues')}</Text>
                 {ISSUES.map(i => (
                   <FilterOption 
                     key={i.value} 
-                    label={i.label} 
+                    label={t(`filters.issuesList.${i.labelKey}`)} 
                     selected={!!filters.issue?.includes(i.value)} 
                     onPress={() => handleToggleIssue(i.value)} 
                   />
@@ -143,10 +145,10 @@ export default function FilterOverlay({ onApply }: { onApply: () => void }) {
 
           <View style={styles.footer}>
             <TouchableOpacity style={styles.clearBtn} onPress={clearFilters}>
-              <Text style={styles.clearText}>Limpiar Todo</Text>
+              <Text style={styles.clearText}>{t('filters.clearAll')}</Text>
             </TouchableOpacity>
             <TouchableOpacity style={styles.applyBtn} onPress={() => { onApply(); setIsFilterVisible(false); }}>
-              <Text style={styles.applyText}>Aplicar Filtros</Text>
+              <Text style={styles.applyText}>{t('filters.apply')}</Text>
             </TouchableOpacity>
           </View>
         </View>
