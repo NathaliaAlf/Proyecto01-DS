@@ -95,7 +95,45 @@ Cuando vayas a programar algo nuevo, **nunca** lo hagas directamente en `develop
 
 ---
 
-## 📱 ¿Cómo ver los cambios en mi celular?
-1. Descarga la app **Expo Go** (App Store o Play Store).
-2. Asegúrate de que tu celular y tu PC estén conectados a la **misma red Wi-Fi**.
-3. Ejecuta `npx expo start` y escanea el código QR que aparecerá en la terminal.
+## 🌐 Publicación Web en Hostinger 
+
+Este proyecto puede publicarse como **aplicación web** usando Expo + React Native Web.
+
+### Desde la raíz del proyecto:
+
+```bash
+npx expo export
+````
+
+Se generará la carpeta:
+
+```
+dist/
+```
+
+---
+
+### Subir a Hostinger
+
+1. Entra a **hPanel → Administrador de archivos → public_html**
+2. Sube **todo el contenido de la carpeta `dist/`** dentro de `public_html`
+
+Debe quedar así:
+
+```
+public_html/
+ ├── index.html
+ ├── assets/
+ └── ...
+```
+
+---
+
+### Acceso
+
+La app estará disponible en:
+
+```
+https://powderblue-rhinoceros-189093.hostingersite.com/
+```
+
