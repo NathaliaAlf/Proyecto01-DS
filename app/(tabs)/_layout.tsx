@@ -2,8 +2,8 @@ import FilterOverlay from '@/components/FilterOverlay';
 import { useClientOnlyValue } from '@/components/useClientOnlyValue';
 import { useAuth } from '@/context/AuthContext';
 import { useFilters } from '@/context/FilterContext';
-import { useTheme } from '@/context/ThemeContext';
 import { useLanguage } from '@/context/LanguageContext';
+import { useTheme } from '@/context/ThemeContext';
 import { FontAwesome, FontAwesome5, Ionicons, MaterialIcons } from '@expo/vector-icons';
 import { Tabs, useRouter } from 'expo-router';
 import React, { useRef, useState } from 'react';
@@ -26,7 +26,7 @@ export default function TabLayout() {
   const [searchQuery, setSearchQuery] = useState('');
   const [isSearching, setIsSearching] = useState(false);
   const [isSearchFocused, setIsSearchFocused] = useState(false);
-  const [showProfileMenu, setShowProfileMenu] = useState(false);
+  const [showMainMenu, setShowMainMenu] = useState(false);
   const [showLanguageMenu, setShowLanguageMenu] = useState(false);
   const [menuPosition, setMenuPosition] = useState({ x: 0, y: 0 });
   
@@ -34,7 +34,7 @@ export default function TabLayout() {
   const router = useRouter();
   const { user, logout } = useAuth();
   const searchInputRef = useRef<TextInput>(null);
-  const profileButtonRef = useRef<React.ComponentRef<typeof TouchableOpacity>>(null);
+  const menuButtonRef = useRef<React.ComponentRef<typeof TouchableOpacity>>(null);
   const languageButtonRef = useRef<React.ComponentRef<typeof TouchableOpacity>>(null);
 
   const { width: screenWidth } = useWindowDimensions();
@@ -48,13 +48,13 @@ export default function TabLayout() {
 
   const { colors, theme, toggleTheme } = useTheme();
   const { locale, setLocale, t } = useLanguage();
-  const styles = createStyles(colors);
+  const styles = createStyles(colors, screenWidth, isMobile);
 
   const handleHeaderSearch = async () => {
     const cleanQuery = searchQuery.trim();
     if (!cleanQuery) return;
-
-        setIsSearching(true);
+    
+    setIsSearching(true);
     try {
       router.push({
         pathname: '/especies',
@@ -80,34 +80,37 @@ export default function TabLayout() {
     searchInputRef.current?.focus();
   };
 
-  const handleMenuPress = () => {
+  const handleMainMenuPress = () => {
     (menuButtonRef.current as any)?.measure?.(
       (x: number, y: number, width: number, height: number, pageX: number, pageY: number) => {
         setMenuPosition({
           x: Math.min(pageX - 50, screenWidth - 250),
           y: pageY + height + 5,
         });
-        setShowProfileMenu(true);
+        setShowMainMenu(true);
       }
     );
   };
   
   const handleLanguagePress = () => {
-    (languageButtonRef.current as any)?.measure(
+    // On mobile, language is inside the main menu
+    if (isMobile) {
+      handleMainMenuPress();
+    } else {
+      (languageButtonRef.current as any)?.measure?.(
         (x: number, y: number, width: number, height: number, pageX: number, pageY: number) => {
           setMenuPosition({
-            x: pageX - 160,
+            x: Math.min(pageX - 50, screenWidth - 150),
             y: pageY + height + 5,
           });
           setShowLanguageMenu(true);
         }
-    );
+      );
+    }
   };
 
   const handleLogout = async () => {
-    setShowMenu(false);
-    console.log("touched the logout button");
-  
+    setShowMainMenu(false);
     try {
       await logout();
       await new Promise(resolve => setTimeout(resolve, 500));
@@ -119,23 +122,24 @@ export default function TabLayout() {
   };
 
   const closeAllMenus = () => {
-    setShowProfileMenu(false);
+    setShowMainMenu(false);
     setShowLanguageMenu(false);
   };
   
   const changeLanguage = (newLocale: string) => {
     setLocale(newLocale);
     setShowLanguageMenu(false);
+    setShowMainMenu(false);
   };
 
-  const MenuModal = () => (
+  const MainMenu = () => (
     <Modal
       transparent={true}
-      visible={showMenu}
+      visible={showMainMenu}
       animationType="fade"
-      onRequestClose={closeMenu}
+      onRequestClose={closeAllMenus}
     >
-      <TouchableWithoutFeedback onPress={closeMenu}>
+      <TouchableWithoutFeedback onPress={closeAllMenus}>
         <View style={styles.menuOverlay}>
           <TouchableWithoutFeedback>
             <View style={[styles.menuContainer, { 
@@ -173,27 +177,38 @@ export default function TabLayout() {
                   style={styles.menuItem}
                   onPress={() => {
                     toggleTheme();
-                    closeMenu();
+                    closeAllMenus();
                   }}
                 >
                   <FontAwesome name="adjust" size={20} color={colors.text} />
                   <Text style={styles.menuItemText}>
-                    {theme === 'dark' ? 'Light Mode' : 'Dark Mode'}
+                    {theme === 'dark' ? t('lightMode') : t('darkMode')}
                   </Text>
                 </TouchableOpacity>
                 
                 <View style={styles.menuDivider} />
                 
-                {/* Translate option */}
+                {/* Language option */}
                 <TouchableOpacity 
                   style={styles.menuItem}
                   onPress={() => {
-                    // Add translate functionality here
-                    closeMenu();
+                    closeAllMenus();
+                    // On mobile, show language options inline
+                    if (isMobile) {
+                      // For mobile, we'll handle language change directly
+                      // You could show another menu or implement inline selection
+                      const newLocale = locale === 'en' ? 'es' : 'en';
+                      changeLanguage(newLocale);
+                    } else {
+                      // On desktop, trigger the separate language menu
+                      handleLanguagePress();
+                    }
                   }}
                 >
                   <MaterialIcons name="translate" size={20} color={colors.text} />
-                  <Text style={styles.menuItemText}>Translate</Text>
+                  <Text style={styles.menuItemText}>
+                    {locale === 'en' ? 'Español' : 'English'}
+                  </Text>
                 </TouchableOpacity>
                 
                 <View style={styles.menuDivider} />
@@ -206,7 +221,22 @@ export default function TabLayout() {
                   >
                     <Ionicons name="log-out-outline" size={22} color="#e74c3c" />
                     <Text style={[styles.menuItemText, styles.logoutText]}>{t('logout')}</Text>
-                </TouchableOpacity>
+                  </TouchableOpacity>
+                )}
+                
+                {/* Login option - only show if not logged in */}
+                {!user && (
+                  <TouchableOpacity 
+                    style={[styles.menuItem]}
+                    onPress={() => {
+                      closeAllMenus();
+                      router.push('/(auth)/login');
+                    }}
+                  >
+                    <Ionicons name="log-in-outline" size={22} color={colors.text} />
+                    <Text style={styles.menuItemText}>{t('login')}</Text>
+                  </TouchableOpacity>
+                )}
               </View>
             </View>
           </TouchableWithoutFeedback>
@@ -216,53 +246,38 @@ export default function TabLayout() {
   );
   
   const LanguageMenu = () => (
-      <Modal
-          transparent={true}
-          visible={showLanguageMenu}
-          animationType="fade"
-          onRequestClose={closeAllMenus}
-      >
-        <TouchableWithoutFeedback onPress={closeAllMenus}>
-          <View style={styles.menuOverlay}>
-            <TouchableWithoutFeedback>
-              <View style={[styles.menuContainer, {
-                top: menuPosition.y,
-                left: Math.max(menuPosition.x, 10),
-              }]}>
-                <View style={styles.menuItemsContainer}>
-                  <TouchableOpacity
-                      style={styles.menuItem}
-                      onPress={() => changeLanguage('en')}
-                  >
-                    <Text style={styles.menuItemText}>{t('english')}</Text>
-                  </TouchableOpacity>
-                  <TouchableOpacity
-                      style={styles.menuItem}
-                      onPress={() => changeLanguage('es')}
-                  >
-                    <Text style={styles.menuItemText}>{t('spanish')}</Text>
-                    </TouchableOpacity>
-                )}
-                
-                {/* Login/Profile option - only show if not logged in */}
-                {!user && (
-                  <TouchableOpacity 
-                    style={[styles.menuItem]}
-                    onPress={() => {
-                      closeMenu();
-                      router.push('/(auth)/login');
-                    }}
-                  >
-                    <Ionicons name="log-in-outline" size={22} color={colors.text} />
-                    <Text style={styles.menuItemText}>Log In</Text>
-                  </TouchableOpacity>
-                )}
-                </View>
+    <Modal
+      transparent={true}
+      visible={showLanguageMenu}
+      animationType="fade"
+      onRequestClose={closeAllMenus}
+    >
+      <TouchableWithoutFeedback onPress={closeAllMenus}>
+        <View style={styles.menuOverlay}>
+          <TouchableWithoutFeedback>
+            <View style={[styles.menuContainer, {
+              top: menuPosition.y,
+              left: Math.max(Math.min(menuPosition.x, screenWidth - 150), 10),
+            }]}>
+              <View style={styles.menuItemsContainer}>
+                <TouchableOpacity
+                  style={styles.menuItem}
+                  onPress={() => changeLanguage('en')}
+                >
+                  <Text style={styles.menuItemText}>English</Text>
+                </TouchableOpacity>
+                <TouchableOpacity
+                  style={styles.menuItem}
+                  onPress={() => changeLanguage('es')}
+                >
+                  <Text style={styles.menuItemText}>Español</Text>
+                </TouchableOpacity>
               </View>
-            </TouchableWithoutFeedback>
-          </View>
-        </TouchableWithoutFeedback>
-      </Modal>
+            </View>
+          </TouchableWithoutFeedback>
+        </View>
+      </TouchableWithoutFeedback>
+    </Modal>
   );
 
   return (
@@ -384,11 +399,11 @@ export default function TabLayout() {
           ),
           headerRight: () => (
             <View style={styles.headerRightContainer}>
-              {/* Mobile: Show hamburger menu */}
+              {/* Mobile: Show hamburger menu with all options */}
               {isMobile ? (
                 <TouchableOpacity 
                   ref={menuButtonRef}
-                  onPress={handleMenuPress}
+                  onPress={handleMainMenuPress}
                   style={styles.menuButton}
                   hitSlop={{ top: 10, bottom: 10, left: 10, right: 10 }}
                 >
@@ -405,7 +420,9 @@ export default function TabLayout() {
                     <FontAwesome name="adjust" style={styles.headerIcon} />
                   </TouchableOpacity>
                   
-                  <TouchableOpacity ref={languageButtonRef} onPress={handleLanguagePress} 
+                  <TouchableOpacity 
+                    ref={languageButtonRef}
+                    onPress={handleLanguagePress}
                     style={styles.headerIconButton}
                     hitSlop={{ top: 10, bottom: 10, left: 10, right: 10 }}
                   >
@@ -413,7 +430,7 @@ export default function TabLayout() {
                   </TouchableOpacity>
 
                   <TouchableOpacity 
-                    onPress={handleMenuPress}
+                    onPress={handleMainMenuPress}
                     style={styles.profileButton}
                     hitSlop={{ top: 10, bottom: 10, left: 10, right: 10 }}
                   >
@@ -479,7 +496,7 @@ export default function TabLayout() {
         />
       </Tabs>
       
-      <MenuModal />
+      <MainMenu />
       <LanguageMenu />
       <FilterOverlay onApply={handleHeaderSearch} />
     </>
