@@ -2,8 +2,8 @@ import FilterOverlay from '@/components/FilterOverlay';
 import { useClientOnlyValue } from '@/components/useClientOnlyValue';
 import { useAuth } from '@/context/AuthContext';
 import { useFilters } from '@/context/FilterContext';
-import { useTheme } from '@/context/ThemeContext';
 import { useLanguage } from '@/context/LanguageContext';
+import { useTheme } from '@/context/ThemeContext';
 import { FontAwesome, FontAwesome5, Ionicons, MaterialIcons } from '@expo/vector-icons';
 import { Tabs, useRouter } from 'expo-router';
 import React, { useRef, useState } from 'react';
@@ -26,7 +26,7 @@ export default function TabLayout() {
   const [searchQuery, setSearchQuery] = useState('');
   const [isSearching, setIsSearching] = useState(false);
   const [isSearchFocused, setIsSearchFocused] = useState(false);
-  const [showProfileMenu, setShowProfileMenu] = useState(false);
+  const [showMainMenu, setShowMainMenu] = useState(false);
   const [showLanguageMenu, setShowLanguageMenu] = useState(false);
   const [menuPosition, setMenuPosition] = useState({ x: 0, y: 0 });
   
@@ -34,22 +34,27 @@ export default function TabLayout() {
   const router = useRouter();
   const { user, logout } = useAuth();
   const searchInputRef = useRef<TextInput>(null);
-  const profileButtonRef = useRef<React.ComponentRef<typeof TouchableOpacity>>(null);
+  const menuButtonRef = useRef<React.ComponentRef<typeof TouchableOpacity>>(null);
   const languageButtonRef = useRef<React.ComponentRef<typeof TouchableOpacity>>(null);
 
   const { width: screenWidth } = useWindowDimensions();
-  const SIDE_ELEMENTS_WIDTH = 400;
-  const availableWidth = Math.max(screenWidth - SIDE_ELEMENTS_WIDTH, 100);
+  const isMobile = screenWidth < 768;
+  
+  // Responsive width calculation
+  const isLargeScreen = screenWidth > 768;
+  const availableWidth = isLargeScreen 
+    ? Math.min(screenWidth * 0.6, 500)
+    : screenWidth * 0.5; // Keep 50% on mobile for cleaner layout
 
   const { colors, theme, toggleTheme } = useTheme();
   const { locale, setLocale, t } = useLanguage();
-  const styles = createStyles(colors);
+  const styles = createStyles(colors, screenWidth, isMobile);
 
   const handleHeaderSearch = async () => {
     const cleanQuery = searchQuery.trim();
     if (!cleanQuery) return;
-
-        setIsSearching(true);
+    
+    setIsSearching(true);
     try {
       router.push({
         pathname: '/especies',
@@ -75,32 +80,37 @@ export default function TabLayout() {
     searchInputRef.current?.focus();
   };
 
-  const handleProfilePress = () => {
-    (profileButtonRef.current as any)?.measure(
+  const handleMainMenuPress = () => {
+    (menuButtonRef.current as any)?.measure?.(
       (x: number, y: number, width: number, height: number, pageX: number, pageY: number) => {
         setMenuPosition({
-          x: pageX - 160,
+          x: Math.min(pageX - 50, screenWidth - 250),
           y: pageY + height + 5,
         });
-        setShowProfileMenu(true);
+        setShowMainMenu(true);
       }
     );
   };
   
   const handleLanguagePress = () => {
-    (languageButtonRef.current as any)?.measure(
+    // On mobile, language is inside the main menu
+    if (isMobile) {
+      handleMainMenuPress();
+    } else {
+      (languageButtonRef.current as any)?.measure?.(
         (x: number, y: number, width: number, height: number, pageX: number, pageY: number) => {
           setMenuPosition({
-            x: pageX - 160,
+            x: Math.min(pageX - 50, screenWidth - 150),
             y: pageY + height + 5,
           });
           setShowLanguageMenu(true);
         }
-    );
+      );
+    }
   };
 
   const handleLogout = async () => {
-    setShowProfileMenu(false);
+    setShowMainMenu(false);
     try {
       await logout();
       await new Promise(resolve => setTimeout(resolve, 500));
@@ -112,19 +122,20 @@ export default function TabLayout() {
   };
 
   const closeAllMenus = () => {
-    setShowProfileMenu(false);
+    setShowMainMenu(false);
     setShowLanguageMenu(false);
   };
   
   const changeLanguage = (newLocale: string) => {
     setLocale(newLocale);
     setShowLanguageMenu(false);
+    setShowMainMenu(false);
   };
 
-  const ProfileMenu = () => (
+  const MainMenu = () => (
     <Modal
       transparent={true}
-      visible={showProfileMenu}
+      visible={showMainMenu}
       animationType="fade"
       onRequestClose={closeAllMenus}
     >
@@ -133,8 +144,9 @@ export default function TabLayout() {
           <TouchableWithoutFeedback>
             <View style={[styles.menuContainer, { 
               top: menuPosition.y,
-              left: Math.max(menuPosition.x, 10),
+              left: Math.max(Math.min(menuPosition.x, screenWidth - 250), 10),
             }]}>
+              {/* User info section - only show if logged in */}
               {user && (
                 <View style={styles.userInfoSection}>
                   <View style={styles.userImageContainer}>
@@ -160,13 +172,71 @@ export default function TabLayout() {
               )}
               
               <View style={styles.menuItemsContainer}>
+                {/* Theme toggle */}
                 <TouchableOpacity 
-                  style={[styles.menuItem, styles.logoutMenuItem]}
-                  onPress={handleLogout}
+                  style={styles.menuItem}
+                  onPress={() => {
+                    toggleTheme();
+                    closeAllMenus();
+                  }}
                 >
-                  <Ionicons name="log-out-outline" size={22} color="#e74c3c" />
-                  <Text style={[styles.menuItemText, styles.logoutText]}>{t('logout')}</Text>
+                  <FontAwesome name="adjust" size={20} color={colors.text} />
+                  <Text style={styles.menuItemText}>
+                    {theme === 'dark' ? t('lightMode') : t('darkMode')}
+                  </Text>
                 </TouchableOpacity>
+                
+                <View style={styles.menuDivider} />
+                
+                {/* Language option */}
+                <TouchableOpacity 
+                  style={styles.menuItem}
+                  onPress={() => {
+                    closeAllMenus();
+                    // On mobile, show language options inline
+                    if (isMobile) {
+                      // For mobile, we'll handle language change directly
+                      // You could show another menu or implement inline selection
+                      const newLocale = locale === 'en' ? 'es' : 'en';
+                      changeLanguage(newLocale);
+                    } else {
+                      // On desktop, trigger the separate language menu
+                      handleLanguagePress();
+                    }
+                  }}
+                >
+                  <MaterialIcons name="translate" size={20} color={colors.text} />
+                  <Text style={styles.menuItemText}>
+                    {locale === 'en' ? 'Español' : 'English'}
+                  </Text>
+                </TouchableOpacity>
+                
+                <View style={styles.menuDivider} />
+                
+                {/* Logout option - only show if logged in */}
+                {user && (
+                  <TouchableOpacity 
+                    style={[styles.menuItem, styles.logoutMenuItem]}
+                    onPress={handleLogout}
+                  >
+                    <Ionicons name="log-out-outline" size={22} color="#e74c3c" />
+                    <Text style={[styles.menuItemText, styles.logoutText]}>{t('logout')}</Text>
+                  </TouchableOpacity>
+                )}
+                
+                {/* Login option - only show if not logged in */}
+                {!user && (
+                  <TouchableOpacity 
+                    style={[styles.menuItem]}
+                    onPress={() => {
+                      closeAllMenus();
+                      router.push('/(auth)/login');
+                    }}
+                  >
+                    <Ionicons name="log-in-outline" size={22} color={colors.text} />
+                    <Text style={styles.menuItemText}>{t('login')}</Text>
+                  </TouchableOpacity>
+                )}
               </View>
             </View>
           </TouchableWithoutFeedback>
@@ -176,38 +246,38 @@ export default function TabLayout() {
   );
   
   const LanguageMenu = () => (
-      <Modal
-          transparent={true}
-          visible={showLanguageMenu}
-          animationType="fade"
-          onRequestClose={closeAllMenus}
-      >
-        <TouchableWithoutFeedback onPress={closeAllMenus}>
-          <View style={styles.menuOverlay}>
-            <TouchableWithoutFeedback>
-              <View style={[styles.menuContainer, {
-                top: menuPosition.y,
-                left: Math.max(menuPosition.x, 10),
-              }]}>
-                <View style={styles.menuItemsContainer}>
-                  <TouchableOpacity
-                      style={styles.menuItem}
-                      onPress={() => changeLanguage('en')}
-                  >
-                    <Text style={styles.menuItemText}>{t('english')}</Text>
-                  </TouchableOpacity>
-                  <TouchableOpacity
-                      style={styles.menuItem}
-                      onPress={() => changeLanguage('es')}
-                  >
-                    <Text style={styles.menuItemText}>{t('spanish')}</Text>
-                  </TouchableOpacity>
-                </View>
+    <Modal
+      transparent={true}
+      visible={showLanguageMenu}
+      animationType="fade"
+      onRequestClose={closeAllMenus}
+    >
+      <TouchableWithoutFeedback onPress={closeAllMenus}>
+        <View style={styles.menuOverlay}>
+          <TouchableWithoutFeedback>
+            <View style={[styles.menuContainer, {
+              top: menuPosition.y,
+              left: Math.max(Math.min(menuPosition.x, screenWidth - 150), 10),
+            }]}>
+              <View style={styles.menuItemsContainer}>
+                <TouchableOpacity
+                  style={styles.menuItem}
+                  onPress={() => changeLanguage('en')}
+                >
+                  <Text style={styles.menuItemText}>English</Text>
+                </TouchableOpacity>
+                <TouchableOpacity
+                  style={styles.menuItem}
+                  onPress={() => changeLanguage('es')}
+                >
+                  <Text style={styles.menuItemText}>Español</Text>
+                </TouchableOpacity>
               </View>
-            </TouchableWithoutFeedback>
-          </View>
-        </TouchableWithoutFeedback>
-      </Modal>
+            </View>
+          </TouchableWithoutFeedback>
+        </View>
+      </TouchableWithoutFeedback>
+    </Modal>
   );
 
   return (
@@ -223,9 +293,10 @@ export default function TabLayout() {
           headerShown: useClientOnlyValue(false, true),
           headerStyle: {
             backgroundColor: colors.tint,
+            height: Platform.OS === 'ios' ? 100 : 80,
           },
           headerShadowVisible: false,
-          headerTitle: () => (
+          headerTitle: ({ children }) => (
             <View style={[styles.center_header_container, { width: availableWidth }]}>
               <TouchableOpacity 
                 onPress={() => setIsFilterVisible(true)} 
@@ -244,6 +315,12 @@ export default function TabLayout() {
                 styles.searchContainer,
                 isSearchFocused && styles.searchContainerFocused
               ]}>
+                {/* Magnifying glass icon inside search bar */}
+                <FontAwesome 
+                  name="search" 
+                  style={styles.searchBarIcon} 
+                />
+                
                 <TextInput
                   ref={searchInputRef}
                   style={styles.searchInput}
@@ -282,21 +359,25 @@ export default function TabLayout() {
                 )}
               </View>
 
-              <TouchableOpacity 
-                onPress={handleHeaderSearch} 
-                style={styles.searchButton}
-                disabled={!searchQuery.trim()}
-              >
-                <FontAwesome name="search" style={[
-                  styles.searchIcon,
-                  !searchQuery.trim() && { opacity: 0.5 }
-                ]} />
-              </TouchableOpacity>
+              {/* External search button - only show on desktop/tablet */}
+              {!isMobile && (
+                <TouchableOpacity 
+                  onPress={handleHeaderSearch} 
+                  style={styles.searchButton}
+                  disabled={!searchQuery.trim()}
+                >
+                  <FontAwesome name="search" style={[
+                    styles.searchButtonIcon,
+                    !searchQuery.trim() && { opacity: 0.5 }
+                  ]} />
+                </TouchableOpacity>
+              )}
             </View>
           ),
           headerTitleAlign: 'center',
           headerTitleStyle: {
             flex: 1,
+            maxWidth: '100%',
           },
           headerLeft: () => (
             <View style={styles.headerLeft}>
@@ -307,7 +388,10 @@ export default function TabLayout() {
                     ? require("@/assets/images/logo_dark.png")
                     : require("@/assets/images/logo.png")
                   }
-                  style={styles.logo}
+                  style={[
+                    styles.logo,
+                    { width: isMobile ? 40 : 45 }
+                  ]}
                   resizeMode="contain"
                 />
               </TouchableOpacity>
@@ -315,37 +399,68 @@ export default function TabLayout() {
           ),
           headerRight: () => (
             <View style={styles.headerRightContainer}>
-              
-              <TouchableOpacity onPress={toggleTheme}>
-                <FontAwesome name="adjust" style={styles.headerIcon} />
-              </TouchableOpacity>
+              {/* Mobile: Show hamburger menu with all options */}
+              {isMobile ? (
+                <TouchableOpacity 
+                  ref={menuButtonRef}
+                  onPress={handleMainMenuPress}
+                  style={styles.menuButton}
+                  hitSlop={{ top: 10, bottom: 10, left: 10, right: 10 }}
+                >
+                  <Ionicons name="ellipsis-vertical" style={styles.menuIcon} />
+                </TouchableOpacity>
+              ) : (
+                /* Desktop/Tablet: Show individual icons */
+                <>
+                  <TouchableOpacity 
+                    onPress={toggleTheme} 
+                    style={styles.headerIconButton}
+                    hitSlop={{ top: 10, bottom: 10, left: 10, right: 10 }}
+                  >
+                    <FontAwesome name="adjust" style={styles.headerIcon} />
+                  </TouchableOpacity>
+                  
+                  <TouchableOpacity 
+                    ref={languageButtonRef}
+                    onPress={handleLanguagePress}
+                    style={styles.headerIconButton}
+                    hitSlop={{ top: 10, bottom: 10, left: 10, right: 10 }}
+                  >
+                    <MaterialIcons name="translate" style={styles.headerIcon} />
+                  </TouchableOpacity>
 
-              <TouchableOpacity ref={languageButtonRef} onPress={handleLanguagePress}>
-                <MaterialIcons name="translate" style={styles.headerIcon} />
-              </TouchableOpacity>
-
-              <TouchableOpacity 
-                ref={profileButtonRef}
-                onPress={handleProfilePress}
-                hitSlop={{ top: 10, bottom: 10, left: 10, right: 10 }}
-              >
-                <View style={styles.profile_picture_container}>
-                  <Image
-                    source={
-                      user?.photoURL
-                        ? { uri: user.photoURL }
-                        : require("@/assets/images/default_profile_pic.png")
-                    }
-                    style={styles.profile_picture}
-                    resizeMode='cover'
-                  />
-                </View>
-              </TouchableOpacity>
-
+                  <TouchableOpacity 
+                    onPress={handleMainMenuPress}
+                    style={styles.profileButton}
+                    hitSlop={{ top: 10, bottom: 10, left: 10, right: 10 }}
+                  >
+                    <View style={[
+                      styles.profile_picture_container,
+                      { width: 30, height: 30 }
+                    ]}>
+                      <Image
+                        source={
+                          user?.photoURL
+                            ? { uri: user.photoURL }
+                            : require("@/assets/images/default_profile_pic.png")
+                        }
+                        style={styles.profile_picture}
+                        resizeMode='cover'
+                      />
+                    </View>
+                  </TouchableOpacity>
+                </>
+              )}
             </View>
           ),
           headerRightContainerStyle: {
-            width: 70,
+            minWidth: isMobile ? 50 : 90,
+            paddingRight: 12,
+            justifyContent: 'flex-end',
+          },
+          headerLeftContainerStyle: {
+            minWidth: isMobile ? 60 : 65,
+            paddingLeft: 12,
           },
         }}
       >
@@ -381,20 +496,21 @@ export default function TabLayout() {
         />
       </Tabs>
       
-      <ProfileMenu />
+      <MainMenu />
       <LanguageMenu />
       <FilterOverlay onApply={handleHeaderSearch} />
     </>
   );
 }
 
-const createStyles = (colors: any) => StyleSheet.create({
+const createStyles = (colors: any, screenWidth: number, isMobile: boolean) => StyleSheet.create({
   center_header_container: {
     flexDirection: "row",
     alignItems: "center",
     justifyContent: "space-between",
-    maxWidth: '100%',
     alignSelf: 'center',
+    flex: 1,
+    maxWidth: '100%',
   },
   searchContainer: {
     flex: 1,
@@ -402,19 +518,25 @@ const createStyles = (colors: any) => StyleSheet.create({
     alignItems: 'center',
     backgroundColor: colors.background,
     borderRadius: 25,
-    paddingHorizontal: 15,
-    height: 40,
-    marginHorizontal: 8,
-    minWidth: 100,
+    paddingHorizontal: isMobile ? 12 : 15,
+    height: isMobile ? 36 : 38,
+    marginHorizontal: isMobile ? 6 : 8,
     position: 'relative',
+    minWidth: isMobile ? 60 : 70,
   },
   searchContainerFocused: {
     backgroundColor: colors.background,
   },
+  searchBarIcon: {
+    fontSize: isMobile ? 16 : 18,
+    color: colors.background,
+    marginRight: 8,
+    opacity: 0.7,
+  },
   searchInput: {
     flex: 1,
-    fontSize: 16,
-    paddingVertical: Platform.OS === 'ios' ? 10 : 8,
+    fontSize: isMobile ? 14 : 16,
+    paddingVertical: Platform.OS === 'ios' ? 8 : 6,
     paddingHorizontal: 8,
     color: colors.selected,
     borderWidth: 0,
@@ -428,18 +550,18 @@ const createStyles = (colors: any) => StyleSheet.create({
     textAlignVertical: 'center',
   },
   filterButton: {
-    padding: 8,
-    marginRight: 4,
+    padding: isMobile ? 6 : 8,
+    marginRight: isMobile ? 4 : 6,
   },
   filterIcon: {
-    fontSize: 20,
+    fontSize: isMobile ? 18 : 20,
     color: colors.background,
   },
   searchButton: {
     padding: 8,
-    marginLeft: 4,
+    marginLeft: 6,
   },
-  searchIcon: {
+  searchButtonIcon: {
     fontSize: 20,
     color: colors.background,
   },
@@ -449,32 +571,41 @@ const createStyles = (colors: any) => StyleSheet.create({
   },
   searchLoader: {
     position: 'absolute',
-    right: 40,
+    right: isMobile ? 35 : 40,
     zIndex: 10,
   },
   headerLeft: {
     justifyContent: 'center',
     alignItems: 'center',
-    marginLeft: 30
   },
   logo: {
-    width: 50,
+    height: isMobile ? 32 : 34,
   },
   headerRightContainer: {
     flexDirection: 'row',
     alignItems: 'center',
-    gap: 8,
-    marginRight: 30
+    justifyContent: 'flex-end',
+    gap: isMobile ? 0 : 12,
+  },
+  menuButton: {
+    padding: 8,
+  },
+  menuIcon: {
+    fontSize: 24,
+    color: colors.background,
+  },
+  headerIconButton: {
+    padding: 4,
   },
   headerIcon: {
-    fontSize: 25,
+    fontSize: 22,
     color: colors.background,
-    margin: 5 
+  },
+  profileButton: {
+    padding: 2,
   },
   profile_picture_container: {
-    width: 35,
-    height: 35,
-    borderRadius: 17.5,
+    borderRadius: 15,
     overflow: 'hidden',
     backgroundColor: colors.background,
     borderWidth: 2,
@@ -496,7 +627,7 @@ const createStyles = (colors: any) => StyleSheet.create({
     position: 'absolute',
     backgroundColor: colors.background,
     borderRadius: 12,
-    minWidth: 220,
+    width: Math.min(screenWidth - 40, 250),
     shadowColor: "#000",
     shadowOffset: {
       width: 0,
@@ -510,18 +641,18 @@ const createStyles = (colors: any) => StyleSheet.create({
   userInfoSection: {
     flexDirection: 'row',
     alignItems: 'center',
-    padding: 16,
+    padding: screenWidth < 375 ? 12 : 16,
     backgroundColor: colors.card,
     borderBottomWidth: 1,
     borderBottomColor: colors.divider,
   },
   userImageContainer: {
-    width: 40,
-    height: 40,
-    borderRadius: 20,
+    width: screenWidth < 375 ? 32 : 40,
+    height: screenWidth < 375 ? 32 : 40,
+    borderRadius: screenWidth < 375 ? 16 : 20,
     overflow: 'hidden',
     backgroundColor: colors.divider,
-    marginRight: 12,
+    marginRight: screenWidth < 375 ? 8 : 12,
   },
   userImage: {
     width: '100%',
@@ -531,13 +662,13 @@ const createStyles = (colors: any) => StyleSheet.create({
     flex: 1,
   },
   userName: {
-    fontSize: 16,
+    fontSize: screenWidth < 375 ? 14 : 16,
     fontWeight: '600',
     color: colors.text,
     marginBottom: 2,
   },
   userEmail: {
-    fontSize: 13,
+    fontSize: screenWidth < 375 ? 11 : 13,
     color: colors.tabIconDefault,
   },
   menuItemsContainer: {
@@ -546,12 +677,18 @@ const createStyles = (colors: any) => StyleSheet.create({
   menuItem: {
     flexDirection: 'row',
     alignItems: 'center',
-    paddingVertical: 12,
-    paddingHorizontal: 16,
-    gap: 12,
+    paddingVertical: screenWidth < 375 ? 10 : 12,
+    paddingHorizontal: screenWidth < 375 ? 12 : 16,
+    gap: screenWidth < 375 ? 8 : 12,
+  },
+  menuDivider: {
+    height: 1,
+    backgroundColor: colors.divider,
+    marginHorizontal: 16,
+    marginVertical: 4,
   },
   menuItemText: {
-    fontSize: 15,
+    fontSize: screenWidth < 375 ? 14 : 15,
     color: colors.text,
     fontWeight: '500',
   },
