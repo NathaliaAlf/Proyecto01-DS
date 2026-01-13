@@ -478,9 +478,7 @@ export default function TabLayout() {
           name="especies"
           options={{
             title: t('species'),
-            tabBarIcon: ({ color, focused }) => (
-              <Ionicons name={focused ? 'leaf' : 'leaf-outline'} color={color} size={24} />
-            ),
+            href: null,
             headerShown: true,
           }}
         />

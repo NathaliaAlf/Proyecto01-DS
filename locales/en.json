@@ -48,5 +48,43 @@
     "oct": "Oct",
     "nov": "Nov",
     "dec": "Dec"
+  },
+  "filters": {
+    "title": "Advanced Filters",
+    "rank": "Rank",
+    "status": "Status",
+    "higherTaxon": "Higher Taxon",
+    "issues": "Issues and Flags",
+    "clearAll": "Clear All",
+    "apply": "Apply Filters",
+    "ranks": {
+      "SPECIES": "Species",
+      "UNRANKED": "Unranked",
+      "GENUS": "Genus",
+      "VARIETY": "Variety",
+      "SUBSPECIES": "Subspecies",
+      "FORM": "Form",
+      "FAMILY": "Family",
+      "ORDER": "Order",
+      "CLASS": "Class",
+      "PHYLUM": "Phylum",
+      "KINGDOM": "Kingdom"
+    },
+    "statuses": {
+      "ACCEPTED": "Accepted",
+      "SYNONYM": "Synonym",
+      "DOUBTFUL": "Doubtful",
+      "HOMOTYPIC_SYNONYM": "Homotypic synonym",
+      "HETEROTYPIC_SYNONYM": "Heterotypic synonym",
+      "PROPARTE_SYNONYM": "Proparte synonym"
+    },
+    "issuesList": {
+      "BASIONYM_RELATION_DERIVED": "Basionym relation derived",
+      "NAME_PARENT_MISMATCH": "Name parent mismatch",
+      "NO_SPECIES_INCLUDED": "No species included",
+      "CONFLICTING_BASIONYM_COMBINATION": "Conflicting basionym combination",
+      "ORTHOGRAPHIC_VARIANT": "Orthographic variant",
+      "PUBLISHED_BEFORE_PARENT_NAME": "Published earlier than parent name"
+    }
   }
 }
