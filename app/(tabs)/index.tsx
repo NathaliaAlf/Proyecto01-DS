@@ -1,7 +1,7 @@
+import Colors from '@/constants/Colors';
 import { useAuth } from '@/context/AuthContext';
-import { useTheme } from '@/context/ThemeContext';
 import { addToFavorites, getFavorites, removeFromFavorites } from '@/services/favoritesService';
-import { gbifService, ImageItem } from '@/services/gbifService';
+import { gbifService, ImageItem } from '@/services/gbifService'; // Import gbifService
 import AntDesign from '@expo/vector-icons/AntDesign';
 import Entypo from '@expo/vector-icons/Entypo';
 import FontAwesome6 from '@expo/vector-icons/FontAwesome6';
@@ -13,6 +13,7 @@ import React, { useEffect, useRef, useState } from 'react';
 import {
   ActivityIndicator,
   Alert,
+  Dimensions,
   FlatList,
   Image,
   Pressable,
@@ -20,10 +21,10 @@ import {
   StyleSheet,
   Text,
   TouchableOpacity,
-  useWindowDimensions,
   View
 } from 'react-native';
 
+const { width } = Dimensions.get('window');
 const IMAGE_HEIGHT = 150;
 const sections = ["Animalia", "Fungi", "Plantae", "Mollusca", "Arthropoda", "Insecta", "Magnoliopsida", "Lepidoptera", "Coleoptera", "Tracheophyta"]
 
@@ -45,20 +46,219 @@ type SectionOffset = {
   [key: string]: number;
 };
 
+// Moved styles up to fix the getIcon function
+const styles = StyleSheet.create({
+  section_icon: {
+    fontSize: 35,
+    color: Colors.light.tint,
+    marginTop: "auto",
+    marginBottom: "auto",
+    marginRight: 10
+  },
+  // ... rest of your styles (copy all your styles here)
+  container: {
+    flex: 1,
+    backgroundColor: '#fff',
+  },
+  section: {
+    flexDirection: "row",
+    alignItems: "center",
+    minHeight: 120,
+  },
+  content: {
+    flex: 1,
+  },
+  section_title_container: {
+    flexDirection: "row",
+    margin: 9,
+    marginLeft: 100,
+    marginRight: 100,
+    borderBottomWidth: 3,
+    borderBottomColor: "#44444445",
+    alignItems: "center"
+  },
+  section_title: {
+    fontSize: 35,
+    fontWeight: "500",
+    color: Colors.light.selected
+  },
+  section_title_hovered: {
+    textDecorationLine: "underline"
+  },
+  species_pics_row_container: {
+    flex: 1,
+    height: IMAGE_HEIGHT,
+    marginVertical: 10,
+  },
+  species_picture_container: {
+    height: IMAGE_HEIGHT,
+    marginHorizontal: 5,
+    overflow: 'hidden',
+    backgroundColor: Colors.light.background,
+    shadowColor: "#000",
+    shadowOffset: {
+      width: 0,
+      height: 2,
+    },
+    shadowOpacity: 0.1,
+    shadowRadius: 3,
+    elevation: 3,
+  },
+  species_picture: {
+    width: '100%',
+    height: '100%',
+  },
+  gradient: {
+    position: 'absolute',
+    bottom: 0,
+    left: 0,
+    right: 0,
+    height: '50%',
+  },
+  gradient_hovered: {
+    position: 'absolute',
+    bottom: 0,
+    left: 0,
+    right: 0,
+    height: '70%',
+  },
+  speciesNameContainer: {
+    position: 'absolute',
+    bottom: 0,
+    left: 0,
+    right: 0,
+    padding: 8,
+  },
+  speciesName: {
+    color: '#fff',
+    fontSize: 12,
+    fontWeight: '600',
+    textShadowColor: 'rgba(0, 0, 0, 0.75)',
+    textShadowOffset: { width: 0, height: 1 },
+    textShadowRadius: 3,
+  },
+  Badge: {
+    color: "#FFE924",
+    fontSize: 16,
+  },
+  favoriteBadge: {
+    position: 'absolute',
+    top: 8,
+    right: 8,
+    width: 30,
+    height: 30,
+    justifyContent: 'center',
+    alignItems: 'center',
+  },
+  arrow: {
+    fontSize: 40,
+    color: Colors.light.selected,
+  },
+  arrow_container: {
+    width: 100,
+    justifyContent: "center",
+    alignItems: "center",
+    padding: 5,
+  },
+  flatListContent: {
+    paddingHorizontal: 5,
+  },
+  loadingContainer: {
+    flex: 1,
+    justifyContent: "center",
+    alignItems: "center",
+    height: IMAGE_HEIGHT,
+  },
+  emptyContainer: {
+    flex: 1,
+    justifyContent: "center",
+    alignItems: "center",
+    height: IMAGE_HEIGHT,
+    paddingHorizontal: 20,
+  },
+  emptyText: {
+    color: Colors.light.tabIconDefault,
+    fontStyle: "italic",
+  },
+  footerLoader: {
+    paddingVertical: 20,
+    paddingHorizontal: 10,
+    alignItems: 'center',
+    justifyContent: 'center',
+  },
+  contextMenuBackdrop: {
+    position: 'absolute',
+    top: 0,
+    left: 0,
+    right: 0,
+    bottom: 0,
+    backgroundColor: 'transparent',
+  },
+  contextMenu: {
+    position: 'absolute',
+    backgroundColor: '#fff',
+    borderRadius: 8,
+    paddingVertical: 8,
+    minWidth: 200,
+    shadowColor: "#000",
+    shadowOffset: {
+      width: 0,
+      height: 4,
+    },
+    shadowOpacity: 0.3,
+    shadowRadius: 8,
+    elevation: 8,
+    zIndex: 1000,
+  },
+  contextMenuItem: {
+    flexDirection: 'row',
+    alignItems: 'center',
+    paddingVertical: 12,
+    paddingHorizontal: 16,
+    gap: 12,
+  },
+  contextMenuItemDanger: {
+    backgroundColor: 'rgba(231, 76, 60, 0.05)',
+  },
+  contextMenuText: {
+    fontSize: 15,
+    color: Colors.light.text,
+    fontWeight: '500',
+  },
+  contextMenuTextDanger: {
+    color: '#e74c3c',
+  },
+  contextMenuDivider: {
+    height: 1,
+    backgroundColor: '#e0e0e0',
+    marginVertical: 4,
+  }
+});
+
+function getIcon(name: string){
+  switch(name){
+    case "Animalia": return <MaterialCommunityIcons name="dog-side" style={styles.section_icon} />
+    case "Fungi":  return <MaterialCommunityIcons name="mushroom" style={styles.section_icon} />
+    case "Plantae": return <Entypo name="flower" style={styles.section_icon} />
+    case "Mollusca": return <MaterialCommunityIcons name="snail" style={styles.section_icon} />
+    case "Arthropoda": return <MaterialCommunityIcons name="spider" style={styles.section_icon} />
+    case "Insecta": return <FontAwesome6 name="mosquito" style={styles.section_icon} />
+    case "Magnoliopsida": return <Ionicons name="flower-sharp" style={styles.section_icon} />
+    case "Lepidoptera": return <MaterialCommunityIcons name="butterfly" style={styles.section_icon} />
+    case "Coleoptera": return <Ionicons name="bug-sharp" style={styles.section_icon} />
+    case "Tracheophyta": return <MaterialCommunityIcons name="forest" style={styles.section_icon} />
+    default: return null;
+  }
+}
+
 export default function HomeScreen() {
   const router = useRouter();
   const { user } = useAuth();
-  const { width: screenWidth } = useWindowDimensions();
-  const isMobile = screenWidth < 768; // Hide arrows on screens smaller than 768px
-  
   const [imagesBySection, setImagesBySection] = useState<Record<string, ImageWithDimensions[]>>({});
   const [loadingStates, setLoadingStates] = useState<SectionState>({});
   const [loadingMoreStates, setLoadingMoreStates] = useState<SectionLoadingMore>({});
   const [offsetBySection, setOffsetBySection] = useState<SectionOffset>({});
   const [favoriteKeys, setFavoriteKeys] = useState<Set<number>>(new Set());
-  const { colors } = useTheme();
-  const styles = makeStyles(colors, screenWidth);
-
   const [contextMenu, setContextMenu] = useState<{
     visible: boolean;
     x: number;
@@ -71,22 +271,6 @@ export default function HomeScreen() {
   } | null>(null);
   const flatListRefs = useRef<Record<string, FlatList<any> | null>>({});
 
-  function getIcon(name: string){
-    const iconSize = screenWidth < 375 ? 28 : 35;
-    switch(name){
-      case "Animalia": return <MaterialCommunityIcons name="dog-side" size={iconSize} color={colors.selected} />
-      case "Fungi":  return <MaterialCommunityIcons name="mushroom" size={iconSize} color={colors.selected} />
-      case "Plantae": return <Entypo name="flower" size={iconSize} color={colors.selected} />
-      case "Mollusca": return <MaterialCommunityIcons name="snail" size={iconSize} color={colors.selected} />
-      case "Arthropoda": return <MaterialCommunityIcons name="spider" size={iconSize} color={colors.selected} />
-      case "Insecta": return <FontAwesome6 name="mosquito" size={iconSize} color={colors.selected} />
-      case "Magnoliopsida": return <Ionicons name="flower-sharp" size={iconSize} color={colors.selected} />
-      case "Lepidoptera": return <MaterialCommunityIcons name="butterfly" size={iconSize} color={colors.selected} />
-      case "Coleoptera": return <Ionicons name="bug-sharp" size={iconSize} color={colors.selected} />
-      case "Tracheophyta": return <MaterialCommunityIcons name="forest" size={iconSize} color={colors.selected} />
-      default: return null;
-    }
-  }
   // Load favorites
   useEffect(() => {
     const loadFavorites = async () => {
@@ -163,6 +347,7 @@ export default function HomeScreen() {
       const results: Record<string, ImageWithDimensions[]> = {};
 
       for (const section of sections) {
+        // FIXED: Use gbifService.getTaxonGroupImages instead of getTaxonGroupImages
         const images = await gbifService.getTaxonGroupImages(section, 0);
         const processedImages = await processImages(images);
         
@@ -187,6 +372,7 @@ export default function HomeScreen() {
 
     try {
       const currentOffset = offsetBySection[section] || 0;
+      // FIXED: Use gbifService.getTaxonGroupImages instead of getTaxonGroupImages
       const newImages = await gbifService.getTaxonGroupImages(section, currentOffset);
       
       if (newImages.length === 0) {
@@ -333,19 +519,22 @@ export default function HomeScreen() {
     
     return (
       <View style={styles.footerLoader}>
-        <ActivityIndicator size="small" color={colors.tint} />
+        <ActivityIndicator size="small" color={Colors.light.tint} />
       </View>
     );
   };
 
   return (
     <View style={styles.container}>
-      <ScrollView style={styles.content} showsVerticalScrollIndicator={false}>
+      <ScrollView style={styles.content}>
         {sections.map((element, index) => (
-          <View key={index} style={styles.sectionContainer}>
+          <View key={index}>
             <View style={styles.section_title_container}>
               {getIcon(element)}
-              <Pressable>
+              <Pressable onPress={() => router.push({
+                pathname: '/gallery',
+                params: { taxonName: element }
+              })}>
                 {({ hovered }) => (
                   <Text
                     style={[
@@ -360,29 +549,22 @@ export default function HomeScreen() {
             </View>
 
             <View style={styles.section}>
-              {/* Left arrow - only show on larger screens */}
-              {!isMobile && (
-                <TouchableOpacity
-                  style={styles.arrow_container}
-                  onPress={() =>
-                    flatListRefs.current[element]?.scrollToOffset({
-                      offset: 0,
-                      animated: true,
-                    })
-                  }
-                >
-                  <Entypo name="chevron-thin-left" style={styles.arrow} />
-                </TouchableOpacity>
-              )}
+              <TouchableOpacity
+                style={styles.arrow_container}
+                onPress={() =>
+                  flatListRefs.current[element]?.scrollToOffset({
+                    offset: 0,
+                    animated: true,
+                  })
+                }
+              >
+                <Entypo name="chevron-thin-left" style={styles.arrow} />
+              </TouchableOpacity>
 
-              <View style={[
-                styles.species_pics_row_container,
-                // Adjust container width based on arrow visibility
-                !isMobile && { marginHorizontal: 0 }
-              ]}>
+              <View style={styles.species_pics_row_container}>
                 {loadingStates[element] ? (
                   <View style={styles.loadingContainer}>
-                    <ActivityIndicator size="small" color={colors.tint} />
+                    <ActivityIndicator size="small" color={Colors.light.tint} />
                   </View>
                 ) : (
                   <FlatList
@@ -394,7 +576,7 @@ export default function HomeScreen() {
                         flatListRefs.current[element] = ref;
                       }
                     }}
-                    showsHorizontalScrollIndicator={false} 
+                    showsHorizontalScrollIndicator={false}
                     contentContainerStyle={styles.flatListContent}
                     onEndReached={() => loadMoreImages(element)}
                     onEndReachedThreshold={0.5}
@@ -446,7 +628,7 @@ export default function HomeScreen() {
                                 {/* Favorite badge */}
                                 {isFavorite && (
                                   <View style={styles.favoriteBadge}>
-                                    <AntDesign name="star" size={screenWidth < 375 ? 14 : 16} color="#FFE924" />
+                                    <AntDesign name="star" style={styles.Badge} />
                                   </View>
                                 )}
                               </View>
@@ -459,19 +641,16 @@ export default function HomeScreen() {
                 )}
               </View>
 
-              {/* Right arrow - only show on larger screens */}
-              {!isMobile && (
-                <TouchableOpacity
-                  style={styles.arrow_container}
-                  onPress={() =>
-                    flatListRefs.current[element]?.scrollToEnd({
-                      animated: true,
-                    })
-                  }
-                >
-                  <Entypo name="chevron-thin-right" style={styles.arrow} />
-                </TouchableOpacity>
-              )}
+              <TouchableOpacity
+                style={styles.arrow_container}
+                onPress={() =>
+                  flatListRefs.current[element]?.scrollToEnd({
+                    animated: true,
+                  })
+                }
+              >
+                <Entypo name="chevron-thin-right" style={styles.arrow} />
+              </TouchableOpacity>
             </View>
           </View>
         ))}
@@ -487,14 +666,14 @@ export default function HomeScreen() {
           <View 
             style={[
               styles.contextMenu,
-              { top: contextMenu.y, left: Math.min(contextMenu.x, screenWidth - 250) }
+              { top: contextMenu.y, left: contextMenu.x }
             ]}
           >
             <TouchableOpacity 
               style={styles.contextMenuItem}
               onPress={handleOpenDetails}
             >
-              <Ionicons name="information-circle-outline" size={20} color={colors.text} />
+              <Ionicons name="information-circle-outline" size={20} color={Colors.light.text} />
               <Text style={styles.contextMenuText}>View Details</Text>
             </TouchableOpacity>
             
@@ -510,7 +689,7 @@ export default function HomeScreen() {
               <Ionicons 
                 name={contextMenu.isFavorite ? "trash" : "heart-outline"} 
                 size={20} 
-                color={contextMenu.isFavorite ? "#e74c3c" : colors.text} 
+                color={contextMenu.isFavorite ? "#e74c3c" : Colors.light.text} 
               />
               <Text 
                 style={[
@@ -527,194 +706,3 @@ export default function HomeScreen() {
     </View>
   );
 }
-
-const makeStyles = (colors: any, screenWidth: number) =>
-StyleSheet.create({
-  container: {
-    flex: 1,
-    backgroundColor: colors.background,
-  },
-  sectionContainer: {
-    marginBottom: 20,
-  },
-  section: {
-    flexDirection: "row",
-    alignItems: "center",
-    minHeight: 120,
-  },
-  section_icon: {
-    fontSize: 35,
-    color: colors.selected,
-    marginTop: "auto",
-    marginBottom: "auto",
-    marginRight: 10
-  },
-  content: {
-    flex: 1,
-  },
-  section_title_container: {
-    flexDirection: "row",
-    marginHorizontal: screenWidth < 375 ? 20 : screenWidth < 414 ? 24 : 30, // Responsive horizontal margins
-    marginVertical: 12,
-    borderBottomWidth: 3,
-    borderBottomColor: colors.divider,
-    alignItems: "center",
-    paddingBottom: 10,
-  },
-  section_title: {
-    fontSize: screenWidth < 375 ? 28 : screenWidth < 414 ? 32 : 35,
-    fontWeight: "600",
-    color: colors.selected,
-    marginLeft: 10,
-  },
-  section_title_hovered: {
-    textDecorationLine: "underline"
-  },
-  species_pics_row_container: {
-    flex: 1,
-    height: IMAGE_HEIGHT,
-    marginVertical: 10,
-  },
-  species_picture_container: {
-    height: IMAGE_HEIGHT,
-    marginHorizontal: 6,
-    overflow: 'hidden',
-    backgroundColor: colors.background,
-    borderRadius: 8,
-    shadowColor: "#000",
-    shadowOffset: {
-      width: 0,
-      height: 2,
-    },
-    shadowOpacity: 0.15,
-    shadowRadius: 4,
-    elevation: 4,
-  },
-  species_picture: {
-    width: '100%',
-    height: '100%',
-  },
-  gradient: {
-    position: 'absolute',
-    bottom: 0,
-    left: 0,
-    right: 0,
-    height: '50%',
-  },
-  gradient_hovered: {
-    position: 'absolute',
-    bottom: 0,
-    left: 0,
-    right: 0,
-    height: '70%',
-  },
-  speciesNameContainer: {
-    position: 'absolute',
-    bottom: 0,
-    left: 0,
-    right: 0,
-    padding: 10,
-  },
-  speciesName: {
-    color: '#fff',
-    fontSize: screenWidth < 375 ? 11 : 13,
-    fontWeight: '600',
-    textShadowColor: 'rgba(0, 0, 0, 0.75)',
-    textShadowOffset: { width: 0, height: 1 },
-    textShadowRadius: 3,
-  },
-  favoriteBadge: {
-    position: 'absolute',
-    top: 8,
-    right: 8,
-    width: screenWidth < 375 ? 26 : 30,
-    height: screenWidth < 375 ? 26 : 30,
-    justifyContent: 'center',
-    alignItems: 'center',
-    backgroundColor: 'rgba(0,0,0,0.3)',
-    borderRadius: screenWidth < 375 ? 13 : 15,
-  },
-  arrow: {
-    fontSize: screenWidth < 414 ? 36 : 40,
-    color: colors.selected,
-  },
-  arrow_container: {
-    width: screenWidth < 414 ? 80 : 100,
-    justifyContent: "center",
-    alignItems: "center",
-    padding: 5,
-  },
-  flatListContent: {
-    paddingHorizontal: 5,
-  },
-  loadingContainer: {
-    flex: 1,
-    justifyContent: "center",
-    alignItems: "center",
-    height: IMAGE_HEIGHT,
-  },
-  emptyContainer: {
-    flex: 1,
-    justifyContent: "center",
-    alignItems: "center",
-    height: IMAGE_HEIGHT,
-    paddingHorizontal: 20,
-  },
-  emptyText: {
-    color: colors.tabIconDefault,
-    fontStyle: "italic",
-  },
-  footerLoader: {
-    paddingVertical: 20,
-    paddingHorizontal: 10,
-    alignItems: 'center',
-    justifyContent: 'center',
-  },
-  contextMenuBackdrop: {
-    position: 'absolute',
-    top: 0,
-    left: 0,
-    right: 0,
-    bottom: 0,
-    backgroundColor: 'transparent',
-  },
-  contextMenu: {
-    position: 'absolute',
-    backgroundColor: colors.background,
-    borderRadius: 8,
-    paddingVertical: 8,
-    minWidth: 200,
-    shadowColor: "#000",
-    shadowOffset: {
-      width: 0,
-      height: 4,
-    },
-    shadowOpacity: 0.3,
-    shadowRadius: 8,
-    elevation: 8,
-    zIndex: 1000,
-  },
-  contextMenuItem: {
-    flexDirection: 'row',
-    alignItems: 'center',
-    paddingVertical: 12,
-    paddingHorizontal: 16,
-    gap: 12,
-  },
-  contextMenuItemDanger: {
-    backgroundColor: 'rgba(231, 76, 60, 0.05)',
-  },
-  contextMenuText: {
-    fontSize: 15,
-    color: colors.text,
-    fontWeight: '500',
-  },
-  contextMenuTextDanger: {
-    color: '#e74c3c',
-  },
-  contextMenuDivider: {
-    height: 1,
-    backgroundColor: '#e0e0e0',
-    marginVertical: 4,
-  }
-});
