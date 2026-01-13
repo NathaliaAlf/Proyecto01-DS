@@ -6,29 +6,36 @@ import { Tabs, useRouter } from 'expo-router';
 import React, { useRef, useState } from 'react';
 import {
   ActivityIndicator,
+  Alert,
   Image,
+  Modal,
   Platform,
   StyleSheet,
+  Text,
   TextInput,
   TouchableOpacity,
+  TouchableWithoutFeedback,
   View,
   useWindowDimensions
 } from 'react-native';
-
 
 export default function TabLayout() {
   const [searchQuery, setSearchQuery] = useState('');
   const [isSearching, setIsSearching] = useState(false);
   const [isSearchFocused, setIsSearchFocused] = useState(false);
+  const [showProfileMenu, setShowProfileMenu] = useState(false);
+  const [menuPosition, setMenuPosition] = useState({ x: 0, y: 0 });
+  
   const router = useRouter();
-  const { user } = useAuth();
+  const { user, logout } = useAuth();
   const searchInputRef = useRef<TextInput>(null);
+  const profileButtonRef = useRef<React.ComponentRef<typeof TouchableOpacity>>(null);
   const { width: screenWidth } = useWindowDimensions();
 
   const SIDE_ELEMENTS_WIDTH = 400; 
   const availableWidth = Math.max(screenWidth - SIDE_ELEMENTS_WIDTH, 100);
 
-  const {colors, theme, toggleTheme} = useTheme();
+  const { colors, theme, toggleTheme } = useTheme();
   const styles = createStyles(colors);
 
   const handleHeaderSearch = async () => {
@@ -53,161 +60,260 @@ export default function TabLayout() {
     searchInputRef.current?.focus();
   };
 
-  return (
-    <Tabs
-      screenOptions={{
+  const handleProfilePress = () => {
+    // Use the measure method that exists on the ref
+    (profileButtonRef.current as any)?.measure(
+      (x: number, y: number, width: number, height: number, pageX: number, pageY: number) => {
+        setMenuPosition({
+          x: pageX - 160,
+          y: pageY + height + 5,
+        });
+        setShowProfileMenu(true);
+      }
+    );
+  };
 
-        tabBarActiveTintColor: colors.tint,
-        tabBarPosition: 'bottom',
-        tabBarStyle: {
-          backgroundColor: colors.background,
-          borderTopColor: colors.divider,
-        },
-        headerShown: useClientOnlyValue(false, true),
-        headerStyle: {
-          backgroundColor: colors.tint,
-        },
-        headerShadowVisible: false,
-        headerTitle: () => (
-          <View style={[styles.center_header_container, { width: availableWidth }]}>
-            <TouchableOpacity 
-              onPress={() => console.log('Filter pressed')} 
-              style={styles.filterButton}
-            >
-              <FontAwesome5 name="filter" style={styles.filterIcon} />
-            </TouchableOpacity>
+  const handleLogout = async () => {
+    setShowProfileMenu(false);
+    console.log("touched the logout button");
+  
+    try {
+      // Perform logout
+      await logout();
+      
+      // Give a small delay for state to update
+      await new Promise(resolve => setTimeout(resolve, 500));
+      
+      // Redirect to login
+      router.replace('/(auth)/login');
+      
+    } catch (error) {
+      console.error('Logout error:', error);
+      Alert.alert('Error', 'Failed to log out. Please try again.');
+    } finally {
+    }
+  };
 
-            <View style={[
-              styles.searchContainer,
-              isSearchFocused && styles.searchContainerFocused
-            ]}>
-              <TextInput
-                ref={searchInputRef}
-                style={styles.searchInput}
-                placeholder="Ex: Sloth"
-                placeholderTextColor={colors.tint}
-                value={searchQuery}
-                onChangeText={setSearchQuery}
-                onSubmitEditing={handleHeaderSearch}
-                returnKeyType="search"
-                autoCorrect={false}
-                onFocus={() => setIsSearchFocused(true)}
-                onBlur={() => setIsSearchFocused(false)}
-                selectionColor={colors.selected}
-                cursorColor={colors.selected}
-                underlineColorAndroid="transparent"
-                blurOnSubmit={false}
-                textAlignVertical="center"
-              />
+  const closeProfileMenu = () => {
+    setShowProfileMenu(false);
+  };
+
+  const ProfileMenu = () => (
+    <Modal
+      transparent={true}
+      visible={showProfileMenu}
+      animationType="fade"
+      onRequestClose={closeProfileMenu}
+    >
+      <TouchableWithoutFeedback onPress={closeProfileMenu}>
+        <View style={styles.menuOverlay}>
+          <TouchableWithoutFeedback>
+            <View style={[styles.menuContainer, { 
+              top: menuPosition.y,
+              left: Math.max(menuPosition.x, 10), // Ensure it doesn't go off screen
+            }]}>
+              {/* User info section */}
+              {user && (
+                <View style={styles.userInfoSection}>
+                  <View style={styles.userImageContainer}>
+                    <Image
+                      source={
+                        user?.photoURL
+                          ? { uri: user.photoURL }
+                          : require("@/assets/images/default_profile_pic.png")
+                      }
+                      style={styles.userImage}
+                      resizeMode="cover"
+                    />
+                  </View>
+                  <View style={styles.userTextContainer}>
+                    <Text style={styles.userName} numberOfLines={1}>
+                      {user.name || 'User'}
+                    </Text>
+                    <Text style={styles.userEmail} numberOfLines={1}>
+                      {user.email || ''}
+                    </Text>
+                  </View>
+                </View>
+              )}
               
-              {searchQuery.length > 0 && (
+              {/* Menu items */}
+              <View style={styles.menuItemsContainer}>
                 <TouchableOpacity 
-                  onPress={handleClearSearch} 
-                  style={styles.clearButton}
-                  hitSlop={{ top: 10, bottom: 10, left: 10, right: 10 }}
+                  style={[styles.menuItem, styles.logoutMenuItem]}
+                  onPress={handleLogout}
                 >
-                  <MaterialIcons name="cancel" size={16} color={colors.tint} />
+                  <Ionicons name="log-out-outline" size={22} color="#e74c3c" />
+                  <Text style={[styles.menuItemText, styles.logoutText]}>Log Out</Text>
                 </TouchableOpacity>
-              )}
-              
-              {isSearching && (
-                <ActivityIndicator 
-                  size="small" 
-                  color={colors.selected}
-                  style={styles.searchLoader}
-                />
-              )}
+              </View>
             </View>
+          </TouchableWithoutFeedback>
+        </View>
+      </TouchableWithoutFeedback>
+    </Modal>
+  );
 
-            <TouchableOpacity 
-              onPress={handleHeaderSearch} 
-              style={styles.searchButton}
-              disabled={!searchQuery.trim()}
-            >
-              <FontAwesome name="search" style={[
-                styles.searchIcon,
-                !searchQuery.trim() && { opacity: 0.5 }
-              ]} />
-            </TouchableOpacity>
-          </View>
-        ),
-        headerTitleAlign: 'center',
-        headerTitleStyle: {
-          flex: 1,
-        },
-        headerLeft: () => (
-          <View style={styles.headerLeft}>
-            <TouchableOpacity>
-              <Image
-                source={
-                  theme === 'dark'
-                  ? require("@/assets/images/logo_dark.png")
-                  : require("@/assets/images/logo.png")
-                }
-                style={styles.logo}
-                resizeMode="contain"
-              />
-            </TouchableOpacity>
-          </View>
-        ),
-        headerRight: () => (
-          <View style={styles.headerRightContainer}>
-            
-            <TouchableOpacity onPress={toggleTheme}>
-              <FontAwesome name="adjust" style={styles.headerIcon} />
-            </TouchableOpacity>
+  return (
+    <>
+      <Tabs
+        screenOptions={{
+          tabBarActiveTintColor: colors.tint,
+          tabBarPosition: 'bottom',
+          tabBarStyle: {
+            backgroundColor: colors.background,
+            borderTopColor: colors.divider,
+          },
+          headerShown: useClientOnlyValue(false, true),
+          headerStyle: {
+            backgroundColor: colors.tint,
+          },
+          headerShadowVisible: false,
+          headerTitle: () => (
+            <View style={[styles.center_header_container, { width: availableWidth }]}>
+              <TouchableOpacity 
+                onPress={() => console.log('Filter pressed')} 
+                style={styles.filterButton}
+              >
+                <FontAwesome5 name="filter" style={styles.filterIcon} />
+              </TouchableOpacity>
 
-            <TouchableOpacity>
-              <MaterialIcons name="translate" style={styles.headerIcon} />
-            </TouchableOpacity>
+              <View style={[
+                styles.searchContainer,
+                isSearchFocused && styles.searchContainerFocused
+              ]}>
+                <TextInput
+                  ref={searchInputRef}
+                  style={styles.searchInput}
+                  placeholder="Ex: Sloth"
+                  placeholderTextColor={colors.tint}
+                  value={searchQuery}
+                  onChangeText={setSearchQuery}
+                  onSubmitEditing={handleHeaderSearch}
+                  returnKeyType="search"
+                  autoCorrect={false}
+                  onFocus={() => setIsSearchFocused(true)}
+                  onBlur={() => setIsSearchFocused(false)}
+                  selectionColor={colors.selected}
+                  cursorColor={colors.selected}
+                  underlineColorAndroid="transparent"
+                  blurOnSubmit={false}
+                  textAlignVertical="center"
+                />
+                
+                {searchQuery.length > 0 && (
+                  <TouchableOpacity 
+                    onPress={handleClearSearch} 
+                    style={styles.clearButton}
+                    hitSlop={{ top: 10, bottom: 10, left: 10, right: 10 }}
+                  >
+                    <MaterialIcons name="cancel" size={16} color={colors.tint} />
+                  </TouchableOpacity>
+                )}
+                
+                {isSearching && (
+                  <ActivityIndicator 
+                    size="small" 
+                    color={colors.selected}
+                    style={styles.searchLoader}
+                  />
+                )}
+              </View>
 
-            <TouchableOpacity>
-              <View style={styles.profile_picture_container}>
+              <TouchableOpacity 
+                onPress={handleHeaderSearch} 
+                style={styles.searchButton}
+                disabled={!searchQuery.trim()}
+              >
+                <FontAwesome name="search" style={[
+                  styles.searchIcon,
+                  !searchQuery.trim() && { opacity: 0.5 }
+                ]} />
+              </TouchableOpacity>
+            </View>
+          ),
+          headerTitleAlign: 'center',
+          headerTitleStyle: {
+            flex: 1,
+          },
+          headerLeft: () => (
+            <View style={styles.headerLeft}>
+              <TouchableOpacity>
                 <Image
                   source={
-                    user?.photoURL
-                    ? { uri: user.photoURL }
-                    : require("@/assets/images/default_profile_pic.png")
+                    theme === 'dark'
+                    ? require("@/assets/images/logo_dark.png")
+                    : require("@/assets/images/logo.png")
                   }
-                  style={styles.profile_picture}
-                  resizeMode='center'
-                  />
-              </View>
-            </TouchableOpacity>
+                  style={styles.logo}
+                  resizeMode="contain"
+                />
+              </TouchableOpacity>
+            </View>
+          ),
+          headerRight: () => (
+            <View style={styles.headerRightContainer}>
+              
+              <TouchableOpacity onPress={toggleTheme}>
+                <FontAwesome name="adjust" style={styles.headerIcon} />
+              </TouchableOpacity>
 
-          </View>
-        ),
-        headerRightContainerStyle: {
-          width: 70, // Ancho fijo para el lado derecho
-        },
-      }}
-    >
-      <Tabs.Screen
-        name="index"
-        options={{
-          title: 'Home',
-          tabBarIcon: ({ color, focused }) => (
-            <Ionicons name={focused ? 'home' : 'home-outline'} color={color} size={24} />
+              <TouchableOpacity>
+                <MaterialIcons name="translate" style={styles.headerIcon} />
+              </TouchableOpacity>
+
+              <TouchableOpacity 
+                ref={profileButtonRef}
+                onPress={handleProfilePress}
+                hitSlop={{ top: 10, bottom: 10, left: 10, right: 10 }}
+              >
+                <View style={styles.profile_picture_container}>
+                  <Image
+                    source={
+                      user?.photoURL
+                        ? { uri: user.photoURL }
+                        : require("@/assets/images/default_profile_pic.png")
+                    }
+                    style={styles.profile_picture}
+                    resizeMode='cover'
+                  />
+                </View>
+              </TouchableOpacity>
+
+            </View>
           ),
+          headerRightContainerStyle: {
+            width: 70,
+          },
         }}
-      />
+      >
+        <Tabs.Screen
+          name="index"
+          options={{
+            title: 'Home',
+            tabBarIcon: ({ color, focused }) => (
+              <Ionicons name={focused ? 'home' : 'home-outline'} color={color} size={24} />
+            ),
+          }}
+        />
+        
+        <Tabs.Screen
+          name="favorites"
+          options={{
+            title: 'Favorites',
+            tabBarIcon: ({ color, focused }) => (
+              <Ionicons name={focused ? 'star' : 'star-outline'} color={color} size={24} />
+            ),
+          }}
+        />
+      </Tabs>
       
-      <Tabs.Screen
-        name="favorites"
-        options={{
-          title: 'Favorites',
-          tabBarIcon: ({ color, focused }) => (
-            <Ionicons name={focused ? 'star' : 'star-outline'} color={color} size={24} />
-          ),
-        }}
-      />
-    </Tabs>
+      <ProfileMenu />
+    </>
   );
 }
 
-const createStyles = (colors: any) =>
-
-  StyleSheet.create({
+const createStyles = (colors: any) => StyleSheet.create({
   center_header_container: {
     flexDirection: "row",
     alignItems: "center",
@@ -288,14 +394,100 @@ const createStyles = (colors: any) =>
     margin: 5 
   },
   profile_picture_container: {
-    width: 25,
-    height: 25,
-    borderRadius: 13,
+    width: 35,
+    height: 35,
+    borderRadius: 17.5,
     overflow: 'hidden',
     backgroundColor: colors.background,
+    borderWidth: 2,
+    borderColor: colors.background,
   },
   profile_picture: {
     width: '100%',
     height: '100%',
   },
-})
+  // Menu styles
+  menuOverlay: {
+    flex: 1,
+    backgroundColor: 'rgba(0, 0, 0, 0.3)',
+    justifyContent: 'flex-start',
+    alignItems: 'flex-end',
+    paddingTop: 60, // Adjust based on header height
+    paddingRight: 10,
+  },
+  menuContainer: {
+    position: 'absolute',
+    backgroundColor: colors.background,
+    borderRadius: 12,
+    minWidth: 220,
+    shadowColor: "#000",
+    shadowOffset: {
+      width: 0,
+      height: 4,
+    },
+    shadowOpacity: 0.25,
+    shadowRadius: 12,
+    elevation: 8,
+    overflow: 'hidden',
+  },
+  userInfoSection: {
+    flexDirection: 'row',
+    alignItems: 'center',
+    padding: 16,
+    backgroundColor: colors.card,
+    borderBottomWidth: 1,
+    borderBottomColor: colors.divider,
+  },
+  userImageContainer: {
+    width: 40,
+    height: 40,
+    borderRadius: 20,
+    overflow: 'hidden',
+    backgroundColor: colors.divider,
+    marginRight: 12,
+  },
+  userImage: {
+    width: '100%',
+    height: '100%',
+  },
+  userTextContainer: {
+    flex: 1,
+  },
+  userName: {
+    fontSize: 16,
+    fontWeight: '600',
+    color: colors.text,
+    marginBottom: 2,
+  },
+  userEmail: {
+    fontSize: 13,
+    color: colors.tabIconDefault,
+  },
+  menuItemsContainer: {
+    paddingVertical: 8,
+  },
+  menuItem: {
+    flexDirection: 'row',
+    alignItems: 'center',
+    paddingVertical: 12,
+    paddingHorizontal: 16,
+    gap: 12,
+  },
+  menuItemText: {
+    fontSize: 15,
+    color: colors.text,
+    fontWeight: '500',
+  },
+  menuDivider: {
+    height: 1,
+    backgroundColor: colors.divider,
+    marginVertical: 4,
+    marginHorizontal: 16,
+  },
+  logoutMenuItem: {
+    backgroundColor: 'rgba(231, 76, 60, 0.05)',
+  },
+  logoutText: {
+    color: '#e74c3c',
+  },
+});

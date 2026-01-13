@@ -38,9 +38,8 @@ export async function getTaxonGroupImages(taxon: string, offset: number = 0): Pr
       return [];
     }
 
-    console.log(`Fetching unique species for ${taxon}, offset: ${offset}...`);
 
-    // Step 1: Get a list of species that have images in this taxon
+    // Get a list of species that have images in this taxon
     const speciesUrl = `${BASE_URL}/occurrence/search` +
       `?${config.rank}=${config.value}` +
       `&mediaType=StillImage` +
@@ -62,7 +61,7 @@ export async function getTaxonGroupImages(taxon: string, offset: number = 0): Pr
       return [];
     }
 
-    // Step 2: Extract unique species with their best image
+    // Extract unique species with their best image
     const speciesMap = new Map<number, ImageItem>();
     
     for (const occurrence of data.results) {
@@ -99,7 +98,6 @@ export async function getTaxonGroupImages(taxon: string, offset: number = 0): Pr
     }
 
     const results = Array.from(speciesMap.values());
-    console.log(`Found ${results.length} unique species for ${taxon}`);
     
     return results;
 
@@ -122,9 +120,7 @@ export async function getTaxonGroupImagesV2(taxon: string, offset: number = 0): 
       return [];
     }
 
-    console.log(`Fetching species list for ${taxon}, offset: ${offset}...`);
-
-    // Step 1: Get species that belong to this taxon
+    // Get species that belong to this taxon
     const speciesUrl = `${BASE_URL}/species/search` +
       `?${config.rank}=${config.value}` +
       `&rank=SPECIES` +
@@ -144,7 +140,7 @@ export async function getTaxonGroupImagesV2(taxon: string, offset: number = 0): 
       return [];
     }
 
-    // Step 2: For each species, try to get an image
+    // For each species, try to get an image
     const imagePromises = speciesData.results.slice(0, 12).map(async (species: any) => {
       try {
         const occurrenceUrl = `${BASE_URL}/occurrence/search` +

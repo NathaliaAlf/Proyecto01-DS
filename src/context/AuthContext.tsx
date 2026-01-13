@@ -1,7 +1,6 @@
 import { saveUserIfNotExists } from "@/services/userService";
-import { getItem, saveItem } from "@/utils/storage";
+import { deleteItem, getItem, saveItem } from "@/utils/storage";
 import * as AuthSession from "expo-auth-session";
-import * as SecureStore from "expo-secure-store";
 import * as WebBrowser from "expo-web-browser";
 import { jwtDecode } from "jwt-decode";
 import React, { createContext, useContext, useEffect, useState } from "react";
@@ -16,6 +15,12 @@ export type Auth0Profile = {
   name?: string;
   email?: string;
   picture?: string;
+  email_verified?: boolean;
+  given_name?: string;
+  family_name?: string;
+  nickname?: string;
+  locale?: string;
+  updated_at?: string;
 };
 
 export type AppUser = {
@@ -25,14 +30,22 @@ export type AppUser = {
   photoURL: string | null;
 };
 
+type StoredTokens = {
+  accessToken: string;
+  idToken: string;
+  expiresIn: number;
+  issuedAt: number;
+  refreshToken?: string;
+};
 
 type AuthContextType = {
   user: AppUser | null;
   login: () => Promise<void>;
   logout: () => Promise<void>;
   loading: boolean;
+  error: string | null;
+  clearError: () => void;
 };
-
 
 const AuthContext = createContext<AuthContextType | undefined>(undefined);
 
@@ -41,120 +54,148 @@ const discovery = {
   tokenEndpoint: `https://${AUTH0_DOMAIN}/oauth/token`,
 };
 
+const isTokenExpired = (issuedAt: number, expiresIn: number): boolean => {
+  const now = Math.floor(Date.now() / 1000);
+  const buffer = 300; // 5 minute buffer
+  return now > (issuedAt + expiresIn - buffer);
+};
+
 export function AuthProvider({ children }: { children: React.ReactNode }) {
   const [user, setUser] = useState<AppUser | null>(null);
   const [loading, setLoading] = useState(true);
+  const [error, setError] = useState<string | null>(null);
 
   const redirectUri = AuthSession.makeRedirectUri();
-
-  console.log("REDIRECT URI:", redirectUri);
-
   console.log("REDIRECT URI:", redirectUri);
 
   const [request, response, promptAsync] = AuthSession.useAuthRequest(
     {
       clientId: AUTH0_CLIENT_ID,
       redirectUri,
-      scopes: ["openid", "profile", "email"],
+      scopes: ["openid", "profile", "email", "offline_access"],
       responseType: "code",
       usePKCE: true,
     },
     discovery
   );
 
+  const fetchUserInfo = async (accessToken: string): Promise<Auth0Profile> => {
+    const response = await fetch(`https://${AUTH0_DOMAIN}/userinfo`, {
+      headers: { Authorization: `Bearer ${accessToken}` },
+    });
+    
+    if (!response.ok) throw new Error('Failed to fetch user info');
+    return await response.json();
+  };
+
+  const exchangeToken = async (authCode: string, codeVerifier: string) => {
+    try {
+      const tokenResult = await AuthSession.exchangeCodeAsync(
+        {
+          clientId: AUTH0_CLIENT_ID,
+          code: authCode,
+          redirectUri,
+          extraParams: { code_verifier: codeVerifier },
+        },
+        discovery
+      );
+
+      const userInfo = await fetchUserInfo(tokenResult.accessToken);
+      
+      const storedTokens: StoredTokens = {
+        accessToken: tokenResult.accessToken,
+        idToken: tokenResult.idToken!,
+        expiresIn: tokenResult.expiresIn || 3600,
+        issuedAt: tokenResult.issuedAt || Math.floor(Date.now() / 1000),
+        refreshToken: tokenResult.refreshToken,
+      };
+
+      await saveItem("authTokens", JSON.stringify(storedTokens));
+
+      const appUser: AppUser = {
+        uid: userInfo.sub,
+        name: userInfo.name || userInfo.nickname || null,
+        email: userInfo.email || null,
+        photoURL: userInfo.picture || null,
+      };
+
+      await saveUserIfNotExists(userInfo);
+      setUser(appUser);
+      setError(null);
+
+    } catch (e) {
+      console.error("Auth error:", e);
+      setError("Authentication failed");
+      setUser(null);
+    } finally {
+      setLoading(false);
+    }
+  };
+
   useEffect(() => {
-    if (response?.type !== "success") return;
-    if (!request?.codeVerifier) return;
-
-    const codeVerifier = request.codeVerifier;
-    const authCode = response.params.code;
-
-    const exchangeToken = async () => {
-      try {
-        const tokenResult = await AuthSession.exchangeCodeAsync(
-          {
-            clientId: AUTH0_CLIENT_ID,
-            code: authCode,
-            redirectUri,
-            extraParams: {
-              code_verifier: codeVerifier,
-            },
-          },
-          discovery
-        );
-
-        const storedTokens = {
-          accessToken: tokenResult.accessToken,
-          idToken: tokenResult.idToken,
-          expiresIn: tokenResult.expiresIn,
-          issuedAt: tokenResult.issuedAt,
-        };
-
-        await saveItem("authTokens", JSON.stringify(storedTokens));
-
-        const auth0Profile = jwtDecode<Auth0Profile>(tokenResult.idToken!);
-        const firebaseUser = await saveUserIfNotExists(auth0Profile);
-        setUser(firebaseUser);
-
-
-      } catch (e) {
-        console.error("Auth error:", e);
-        setUser(null);
-      } finally {
-        setLoading(false);
-      }
-    };
-
-    exchangeToken();
+    if (response?.type !== "success" || !request?.codeVerifier) return;
+    exchangeToken(response.params.code, request.codeVerifier);
   }, [response]);
 
+  const restoreSession = async () => {
+    try {
+      const stored = await getItem("authTokens");
+      if (!stored) return;
+
+      const tokens: StoredTokens = JSON.parse(stored);
+      
+      if (isTokenExpired(tokens.issuedAt, tokens.expiresIn)) {
+        console.log("Token expired");
+        await logout();
+        return;
+      }
+
+      const auth0Profile = jwtDecode<Auth0Profile>(tokens.idToken);
+      const firebaseUser = await saveUserIfNotExists(auth0Profile);
+      setUser(firebaseUser);
+
+    } catch (error) {
+      console.error("Session restore error:", error);
+      setUser(null);
+    } finally {
+      setLoading(false);
+    }
+  };
 
   useEffect(() => {
-    const restoreSession = async () => {
-      try {
-        const stored = await getItem("authTokens");
-
-        if (stored) {
-          const tokens: {
-            accessToken: string;
-            idToken: string;
-          } = JSON.parse(stored);
-
-          const auth0Profile = jwtDecode<Auth0Profile>(tokens.idToken);
-          const firebaseUser = await saveUserIfNotExists(auth0Profile);
-          setUser(firebaseUser);
-
-
-        }
-      } catch {
-        setUser(null);
-      } finally {
-        setLoading(false);
-      }
-    };
-
     restoreSession();
   }, []);
 
-  /* ---------- ACTIONS ---------- */
   const login = async () => {
-    if (!request) return;
-    await promptAsync();
+    if (!request) {
+      setError("Auth request not ready");
+      return;
+    }
+    
+    try {
+      setError(null);
+      await promptAsync();
+    } catch (error) {
+      console.error("Login error:", error);
+      setError("Failed to start login process");
+    }
   };
 
   const logout = async () => {
-    setUser(null);
-    await SecureStore.deleteItemAsync("authTokens");
-    setLoading(false);
+    try {
+      setUser(null);
+      
+      await deleteItem("authTokens");
+      
+      console.log('Logout successful');
+    } catch (error) {
+      console.error('Logout error:', error);
+    } finally {
+      setLoading(false);
+    }
   };
 
-
-  useEffect(() => {
-    if (user) {
-      console.log("Logged in user:", user.name);
-    }
-  }, [user]);
-
+  const clearError = () => setError(null);
 
   useEffect(() => {
     if (__DEV__) {
@@ -164,7 +205,14 @@ export function AuthProvider({ children }: { children: React.ReactNode }) {
   }, []);
 
   return (
-    <AuthContext.Provider value={{ user, loading, login, logout }}>
+    <AuthContext.Provider value={{ 
+      user, 
+      loading, 
+      login, 
+      logout, 
+      error,
+      clearError 
+    }}>
       {children}
     </AuthContext.Provider>
   );
@@ -172,8 +220,6 @@ export function AuthProvider({ children }: { children: React.ReactNode }) {
 
 export function useAuth() {
   const context = useContext(AuthContext);
-  if (!context) {
-    throw new Error("useAuth must be used inside an AuthProvider");
-  }
+  if (!context) throw new Error("useAuth must be used inside an AuthProvider");
   return context;
 }

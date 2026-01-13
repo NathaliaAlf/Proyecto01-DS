@@ -1,5 +1,3 @@
-import { AuthProvider, useAuth } from "@/context/AuthContext";
-import { ThemeProvider } from "@/context/ThemeContext";
 import FontAwesome from "@expo/vector-icons/FontAwesome";
 import { useFonts } from "expo-font";
 import { Stack, router, useRootNavigationState, useSegments } from "expo-router";
@@ -8,12 +6,14 @@ import { useEffect } from "react";
 import { ActivityIndicator, View } from "react-native";
 import "react-native-reanimated";
 
+import { useColorScheme } from "@/components/useColorScheme";
+import { AuthProvider, useAuth } from "@/context/AuthContext";
+import { ThemeProvider } from "@/context/ThemeContext";
+
 export {
-  // Catch any errors thrown by the Layout component.
   ErrorBoundary
 } from "expo-router";
 
-// Prevent the splash screen from auto-hiding before asset loading is complete.
 SplashScreen.preventAutoHideAsync();
 
 export default function RootLayout() {
@@ -44,6 +44,7 @@ export default function RootLayout() {
 }
 
 function RootLayoutNav() {
+  const colorScheme = useColorScheme();
   const { user, loading } = useAuth();
   const segments = useSegments();
   const navigationState = useRootNavigationState();
@@ -68,8 +69,10 @@ function RootLayoutNav() {
     );
   }
 
+  // Check if we're in the auth group
+  const inAuthGroup = segments[0] === '(auth)';
+
   return (
-    <ThemeProvider>
       <Stack screenOptions={{ headerShown: false }}>
         <Stack.Screen name="(auth)" />
         <Stack.Screen name="(tabs)" />
@@ -81,6 +84,5 @@ function RootLayoutNav() {
           }}
         />
       </Stack>
-    </ThemeProvider>
   );
 }
