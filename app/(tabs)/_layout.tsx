@@ -1,5 +1,7 @@
+import FilterOverlay from '@/components/FilterOverlay';
 import { useClientOnlyValue } from '@/components/useClientOnlyValue';
 import { useAuth } from '@/context/AuthContext';
+import { useFilters } from '@/context/FilterContext';
 import { useTheme } from '@/context/ThemeContext';
 import { FontAwesome, FontAwesome5, Ionicons, MaterialIcons } from '@expo/vector-icons';
 import { Tabs, useRouter } from 'expo-router';
@@ -20,45 +22,58 @@ import {
 } from 'react-native';
 
 export default function TabLayout() {
-  const [searchQuery, setSearchQuery] = useState('');
-  const [isSearching, setIsSearching] = useState(false);
-  const [isSearchFocused, setIsSearchFocused] = useState(false);
-  const [showProfileMenu, setShowProfileMenu] = useState(false);
+    // --- STATE & HOOKS (Merged from V1 to keep Filter logic) ---
+    const { filters, setIsFilterVisible } = useFilters();
+      const [searchQuery, setSearchQuery] = useState('');
+    const [isSearching, setIsSearching] = useState(false);
+    const [isSearchFocused, setIsSearchFocused] = useState(false);
+    const [showProfileMenu, setShowProfileMenu] = useState(false);
   const [menuPosition, setMenuPosition] = useState({ x: 0, y: 0 });
   
   const router = useRouter();
-  const { user, logout } = useAuth();
-  const searchInputRef = useRef<TextInput>(null);
-  const profileButtonRef = useRef<React.ComponentRef<typeof TouchableOpacity>>(null);
-  const { width: screenWidth } = useWindowDimensions();
+    const { user, logout } = useAuth();
+    const searchInputRef = useRef<TextInput>(null);
 
-  const SIDE_ELEMENTS_WIDTH = 400; 
-  const availableWidth = Math.max(screenWidth - SIDE_ELEMENTS_WIDTH, 100);
+    const profileButtonRef = useRef<React.ComponentRef<typeof TouchableOpacity>>(null);
+  const { width: screenWidth } = useWindowDimensions();
+    const SIDE_ELEMENTS_WIDTH = 400;
+    const availableWidth = Math.max(screenWidth - SIDE_ELEMENTS_WIDTH, 100);
+
+    // --- HANDLERS (Merged from V1) ---
+    const handleLogoPress = () => {
+        // Note: If your file is named index.tsx, change '/home' to '/' or '/(tabs)'
+        router.push({ pathname: '/home' });
+    };
 
   const { colors, theme, toggleTheme } = useTheme();
   const styles = createStyles(colors);
 
-  const handleHeaderSearch = async () => {
-    if (!searchQuery.trim()) return;
-    
-    setIsSearching(true);
-    try {
-      router.push({
-        pathname: '/especies',
-        params: { search: searchQuery }
-      });
-    } catch (error) {
-      console.error('Search error:', error);
-    } finally {
-      setIsSearching(false);
-      searchInputRef.current?.blur();
-    }
-  };
+    const handleHeaderSearch = async () => {
+        const cleanQuery = searchQuery.trim();
+        if (!cleanQuery) return;
 
-  const handleClearSearch = () => {
-    setSearchQuery('');
-    searchInputRef.current?.focus();
-  };
+        setIsSearching(true);
+        searchInputRef.current?.blur();
+
+        try {
+            router.push({
+                pathname: '/(tabs)/especies',
+                params: {
+                    search: cleanQuery,
+                    ...filters
+                }
+            });
+        } catch (error) {
+            console.error('Search error:', error);
+        } finally {
+            setTimeout(() => setIsSearching(false), 500);
+        }
+    };
+
+    const handleClearSearch = () => {
+        setSearchQuery('');
+        searchInputRef.current?.focus();
+    };
 
   const handleProfilePress = () => {
     // Use the measure method that exists on the ref
@@ -154,6 +169,28 @@ export default function TabLayout() {
     </Modal>
   );
 
+    return (
+        <>
+            <Tabs
+                screenOptions={{
+                    tabBarActiveTintColor: Colors[colorScheme ?? "light"].tint,
+                    headerShown: useClientOnlyValue(false, true),
+                    headerStyle: {
+                        backgroundColor: Colors.light.tint,
+                    },
+                    headerShadowVisible: false,
+                    headerTitle: () => (
+                        <View style={[styles.center_header_container, { width: availableWidth }]}>
+                            {/* Filter Button - V1 (Functional) */}
+                            <TouchableOpacity
+                                onPress={() => setIsFilterVisible(true)}
+                                style={styles.filterButton}
+                            >
+                                <FontAwesome5 name="filter" style={[
+                                    styles.filterIcon,
+                                    Object.keys(filters).length > 0 && { color: Colors.light.selected }
+                                ]}  />
+                            </TouchableOpacity>
   return (
     <>
       <Tabs
@@ -178,89 +215,89 @@ export default function TabLayout() {
                 <FontAwesome5 name="filter" style={styles.filterIcon} />
               </TouchableOpacity>
 
-              <View style={[
-                styles.searchContainer,
-                isSearchFocused && styles.searchContainerFocused
-              ]}>
-                <TextInput
-                  ref={searchInputRef}
-                  style={styles.searchInput}
-                  placeholder="Ex: Sloth"
-                  placeholderTextColor={colors.tint}
-                  value={searchQuery}
-                  onChangeText={setSearchQuery}
-                  onSubmitEditing={handleHeaderSearch}
-                  returnKeyType="search"
-                  autoCorrect={false}
-                  onFocus={() => setIsSearchFocused(true)}
-                  onBlur={() => setIsSearchFocused(false)}
-                  selectionColor={colors.selected}
-                  cursorColor={colors.selected}
-                  underlineColorAndroid="transparent"
-                  blurOnSubmit={false}
-                  textAlignVertical="center"
-                />
-                
-                {searchQuery.length > 0 && (
-                  <TouchableOpacity 
-                    onPress={handleClearSearch} 
-                    style={styles.clearButton}
-                    hitSlop={{ top: 10, bottom: 10, left: 10, right: 10 }}
-                  >
-                    <MaterialIcons name="cancel" size={16} color={colors.tint} />
-                  </TouchableOpacity>
-                )}
-                
-                {isSearching && (
-                  <ActivityIndicator 
-                    size="small" 
-                    color={colors.selected}
-                    style={styles.searchLoader}
-                  />
-                )}
-              </View>
+                            {/* Search Bar - V1 Logic (includes styles for loader) */}
+                              <View style={[
+                                  styles.searchContainer,
+                                  isSearchFocused && styles.searchContainerFocused
+                              ]}>
+                                  <TextInput
+                                      ref={searchInputRef}
+                                      style={styles.searchInput}
+                                      placeholder="Ex: Sloth"
+                                      placeholderTextColor={colors.tint}
+                                      value={searchQuery}
+                                      onChangeText={setSearchQuery}
+                                      onSubmitEditing={handleHeaderSearch}
+                                      returnKeyType="search"
+                                      autoCorrect={false}
+                                      onFocus={() => setIsSearchFocused(true)}
+                                      onBlur={() => setIsSearchFocused(false)}
+                                      selectionColor={colors.selected}
+                                      cursorColor={colors.selected}
+                                      underlineColorAndroid="transparent"
+                                      blurOnSubmit={true}
+                                      textAlignVertical="center"
+                                  />
+  
+                                  {searchQuery.length > 0 && (
+                                      <TouchableOpacity
+                                          onPress={handleClearSearch}
+                                          style={styles.clearButton}
+                                          hitSlop={{ top: 10, bottom: 10, left: 10, right: 10 }}
+                                      >
+                                          <MaterialIcons name="cancel" size={16} color={colors.tint} />
+                                      </TouchableOpacity>
+                                  )}
+  
+                                  {isSearching && (
+                                      <ActivityIndicator
+                                          size="small"
+                                          color={colors.selected}
+                                          style={styles.searchLoader}
+                                      />
+                                  )}
+                              </View>
 
-              <TouchableOpacity 
-                onPress={handleHeaderSearch} 
-                style={styles.searchButton}
-                disabled={!searchQuery.trim()}
-              >
-                <FontAwesome name="search" style={[
-                  styles.searchIcon,
-                  !searchQuery.trim() && { opacity: 0.5 }
-                ]} />
-              </TouchableOpacity>
-            </View>
-          ),
-          headerTitleAlign: 'center',
-          headerTitleStyle: {
-            flex: 1,
-          },
-          headerLeft: () => (
-            <View style={styles.headerLeft}>
-              <TouchableOpacity>
-                <Image
-                  source={
+                              <TouchableOpacity
+                                  onPress={handleHeaderSearch}
+                                  style={styles.searchButton}
+                                  disabled={!searchQuery.trim()}
+                              >
+                                  <FontAwesome name="search" style={[
+                                      styles.searchIcon,
+                                      !searchQuery.trim() && { opacity: 0.5 }
+                                  ]} />
+                              </TouchableOpacity>
+                          </View>
+                      ),
+                      headerTitleAlign: 'center',
+                      headerTitleStyle: {
+                          flex: 1,
+                      },
+                      headerLeft: () => (
+                          <View style={styles.headerLeft}>
+                              <TouchableOpacity onPress={() => handleLogoPress()}>
+                                  <Image
+                                      source={
                     theme === 'dark'
                     ? require("@/assets/images/logo_dark.png")
                     : require("@/assets/images/logo.png")
                   }
-                  style={styles.logo}
-                  resizeMode="contain"
-                />
-              </TouchableOpacity>
-            </View>
-          ),
-          headerRight: () => (
-            <View style={styles.headerRightContainer}>
-              
-              <TouchableOpacity onPress={toggleTheme}>
-                <FontAwesome name="adjust" style={styles.headerIcon} />
-              </TouchableOpacity>
+                                      style={styles.logo}
+                                      resizeMode="contain"
+                                  />
+                              </TouchableOpacity>
+                          </View>
+                      ),
+                      headerRight: () => (
+                          <View style={styles.headerRightContainer}>
+                                <TouchableOpacity onPress={toggleTheme}>
+                                  <FontAwesome name="adjust" style={styles.headerIcon} />
+                              </TouchableOpacity>
 
-              <TouchableOpacity>
-                <MaterialIcons name="translate" style={styles.headerIcon} />
-              </TouchableOpacity>
+                              <TouchableOpacity>
+                                  <MaterialIcons name="translate" style={styles.headerIcon} />
+                              </TouchableOpacity>
 
               <TouchableOpacity 
                 ref={profileButtonRef}
@@ -313,181 +350,100 @@ export default function TabLayout() {
   );
 }
 
-const createStyles = (colors: any) => StyleSheet.create({
-  center_header_container: {
-    flexDirection: "row",
-    alignItems: "center",
-    justifyContent: "space-between",
-    maxWidth: '100%',
-    alignSelf: 'center',
-  },
-  searchContainer: {
-    flex: 1,
-    flexDirection: 'row',
-    alignItems: 'center',
-    backgroundColor: colors.background,
-    borderRadius: 25,
-    paddingHorizontal: 15,
-    height: 40,
-    marginHorizontal: 8,
-    minWidth: 100,
-  },
-  searchContainerFocused: {
-    backgroundColor: colors.background,
-  },
-  searchInput: {
-    flex: 1,
-    fontSize: 16,
-    paddingVertical: Platform.OS === 'ios' ? 10 : 8,
-    paddingHorizontal: 8,
-    color: colors.text,
-    borderWidth: 0,
-    borderColor: 'transparent',
-    outlineWidth: 0,
-    outlineColor: 'transparent',
-    backgroundColor: 'transparent',
-    padding: 0,
-    margin: 0,
-    includeFontPadding: false,
-    textAlignVertical: 'center',
-  },
-  filterButton: {
-    padding: 8,
-    marginRight: 4,
-  },
-  filterIcon: {
-    fontSize: 20,
-    color: colors.background,
-  },
-  searchButton: {
-    padding: 8,
-    marginLeft: 4,
-  },
-  searchIcon: {
-    fontSize: 20,
-    color: colors.background,
-  },
-  clearButton: {
-    padding: 4,
-    marginLeft: 4,
-  },
-  searchLoader: {
-    marginLeft: 8,
-  },
-  headerLeft: {
-    justifyContent: 'center',
-    alignItems: 'center',
-    marginLeft: 30
-  },
-  logo: {
-    width: 50,
-  },
-  headerRightContainer: {
-    flexDirection: 'row',
-    alignItems: 'center',
-    gap: 8,
-    marginRight: 30
-  },
-  headerIcon: {
-    fontSize: 25,
-    color: colors.background,
-    margin: 5 
-  },
-  profile_picture_container: {
-    width: 35,
-    height: 35,
-    borderRadius: 17.5,
-    overflow: 'hidden',
-    backgroundColor: colors.background,
-    borderWidth: 2,
-    borderColor: colors.background,
-  },
-  profile_picture: {
-    width: '100%',
-    height: '100%',
-  },
-  // Menu styles
-  menuOverlay: {
-    flex: 1,
-    backgroundColor: 'rgba(0, 0, 0, 0.3)',
-    justifyContent: 'flex-start',
-    alignItems: 'flex-end',
-    paddingTop: 60, // Adjust based on header height
-    paddingRight: 10,
-  },
-  menuContainer: {
-    position: 'absolute',
-    backgroundColor: colors.background,
-    borderRadius: 12,
-    minWidth: 220,
-    shadowColor: "#000",
-    shadowOffset: {
-      width: 0,
-      height: 4,
+// --- STYLES (Merged: primarily V1 as it had better loader positioning) ---
+const styles = StyleSheet.create({
+    center_header_container: {
+        flexDirection: "row",
+        alignItems: "center",
+        justifyContent: "space-between",
+        maxWidth: '100%',
+        alignSelf: 'center',
     },
-    shadowOpacity: 0.25,
-    shadowRadius: 12,
-    elevation: 8,
-    overflow: 'hidden',
-  },
-  userInfoSection: {
-    flexDirection: 'row',
-    alignItems: 'center',
-    padding: 16,
-    backgroundColor: colors.card,
-    borderBottomWidth: 1,
-    borderBottomColor: colors.divider,
-  },
-  userImageContainer: {
-    width: 40,
-    height: 40,
-    borderRadius: 20,
-    overflow: 'hidden',
-    backgroundColor: colors.divider,
-    marginRight: 12,
-  },
-  userImage: {
-    width: '100%',
-    height: '100%',
-  },
-  userTextContainer: {
-    flex: 1,
-  },
-  userName: {
-    fontSize: 16,
-    fontWeight: '600',
-    color: colors.text,
-    marginBottom: 2,
-  },
-  userEmail: {
-    fontSize: 13,
-    color: colors.tabIconDefault,
-  },
-  menuItemsContainer: {
-    paddingVertical: 8,
-  },
-  menuItem: {
-    flexDirection: 'row',
-    alignItems: 'center',
-    paddingVertical: 12,
-    paddingHorizontal: 16,
-    gap: 12,
-  },
-  menuItemText: {
-    fontSize: 15,
-    color: colors.text,
-    fontWeight: '500',
-  },
-  menuDivider: {
-    height: 1,
-    backgroundColor: colors.divider,
-    marginVertical: 4,
-    marginHorizontal: 16,
-  },
-  logoutMenuItem: {
-    backgroundColor: 'rgba(231, 76, 60, 0.05)',
-  },
-  logoutText: {
-    color: '#e74c3c',
-  },
+    searchContainer: {
+        flex: 1,
+        flexDirection: 'row',
+        alignItems: 'center',
+        backgroundColor: Colors.light.background,
+        borderRadius: 25,
+        paddingHorizontal: 15,
+        height: 40,
+        marginHorizontal: 8,
+        minWidth: 100,
+        position: 'relative', // From V1: Needed for absolute loader
+    },
+    searchContainerFocused: {
+        backgroundColor: Colors.light.background,
+    },
+    searchInput: {
+        flex: 1,
+        fontSize: 16,
+        paddingVertical: Platform.OS === 'ios' ? 10 : 8,
+        paddingHorizontal: 8,
+        color: Colors.light.selected,
+        borderWidth: 0,
+        borderColor: 'transparent',
+        outlineWidth: 0,
+        outlineColor: 'transparent',
+        backgroundColor: 'transparent',
+        padding: 0,
+        margin: 0,
+        includeFontPadding: false,
+        textAlignVertical: 'center',
+    },
+    filterButton: {
+        padding: 8,
+        marginRight: 4,
+    },
+    filterIcon: {
+        fontSize: 20,
+        color: 'white',
+    },
+    searchButton: {
+        padding: 8,
+        marginLeft: 4,
+    },
+    searchIcon: {
+        fontSize: 20,
+        color: 'white',
+    },
+    clearButton: {
+        padding: 4,
+        marginLeft: 4,
+    },
+    searchLoader: {
+        // V1 Styles (Absolute positioning works better inside search bar)
+        position: 'absolute',
+        right: 40,
+        zIndex: 10,
+    },
+    headerLeft: {
+        justifyContent: 'center',
+        alignItems: 'center',
+        marginLeft: 30
+    },
+    logo: {
+        width: 50,
+    },
+    headerRightContainer: {
+        flexDirection: 'row',
+        alignItems: 'center',
+        gap: 8,
+        marginRight: 30
+    },
+    headerIcon: {
+        fontSize: 25,
+        color: 'white',
+        margin: 5
+    },
+    profile_picture_container: {
+        width: 25,
+        height: 25,
+        borderRadius: 13,
+        overflow: 'hidden',
+        backgroundColor: 'white',
+    },
+    profile_picture: {
+        width: '100%',
+        height: '100%',
+    },
 });

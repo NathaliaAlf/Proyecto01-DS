@@ -10,6 +10,7 @@ import { useColorScheme } from "@/components/useColorScheme";
 import { AuthProvider, useAuth } from "@/context/AuthContext";
 import { ThemeProvider } from "@/context/ThemeContext";
 
+import { FilterProvider } from '@/context/FilterContext';
 export {
   ErrorBoundary
 } from "expo-router";
@@ -37,7 +38,9 @@ export default function RootLayout() {
   return (
     <ThemeProvider>
       <AuthProvider>
-        <RootLayoutNav />
+      <FilterProvider> 
+          <RootLayoutNav />
+      </FilterProvider>
       </AuthProvider>
     </ThemeProvider>
   );
@@ -78,10 +81,7 @@ function RootLayoutNav() {
         <Stack.Screen name="(tabs)" />
         <Stack.Screen
           name="modal"
-          options={{ 
-            presentation: "modal",
-            headerShown: true 
-          }}
+          options={{ presentation: "modal", headerShown: true }}
         />
       </Stack>
   );

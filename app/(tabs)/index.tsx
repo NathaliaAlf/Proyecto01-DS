@@ -1,7 +1,7 @@
 import { useAuth } from '@/context/AuthContext';
 import { useTheme } from '@/context/ThemeContext';
 import { addToFavorites, getFavorites, removeFromFavorites } from '@/services/favoritesService';
-import { getTaxonGroupImages, ImageItem } from '@/services/gbifService';
+import { gbifService, ImageItem } from '@/services/gbifService';
 import AntDesign from '@expo/vector-icons/AntDesign';
 import Entypo from '@expo/vector-icons/Entypo';
 import FontAwesome6 from '@expo/vector-icons/FontAwesome6';
@@ -160,7 +160,7 @@ export default function HomeScreen() {
       const results: Record<string, ImageWithDimensions[]> = {};
 
       for (const section of sections) {
-        const images = await getTaxonGroupImages(section, 0);
+        const images = await gbifService.getTaxonGroupImages(section, 0);
         const processedImages = await processImages(images);
         
         results[section] = processedImages;
@@ -184,7 +184,7 @@ export default function HomeScreen() {
 
     try {
       const currentOffset = offsetBySection[section] || 0;
-      const newImages = await getTaxonGroupImages(section, currentOffset);
+      const newImages = await gbifService.getTaxonGroupImages(section, currentOffset);
       
       if (newImages.length === 0) {
         setLoadingMoreStates(prev => ({ ...prev, [section]: false }));
