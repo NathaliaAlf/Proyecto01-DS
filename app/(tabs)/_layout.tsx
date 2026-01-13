@@ -48,8 +48,8 @@ export default function TabLayout() {
   const handleHeaderSearch = async () => {
     const cleanQuery = searchQuery.trim();
     if (!cleanQuery) return;
-    
-    setIsSearching(true);
+
+        setIsSearching(true);
     try {
       router.push({
         pathname: '/especies',
