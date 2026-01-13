@@ -1,7 +1,7 @@
-// app/favorites.tsx or app/(tabs)/favorites.tsx
 import Colors from '@/constants/Colors';
 import { useAuth } from '@/context/AuthContext';
 import { useTheme } from '@/context/ThemeContext';
+import { useLanguage } from '@/context/LanguageContext';
 import { Favorite, getFavorites, removeFromFavorites } from '@/services/favoritesService';
 import AntDesign from '@expo/vector-icons/AntDesign';
 import Entypo from '@expo/vector-icons/Entypo';
@@ -42,6 +42,7 @@ export default function FavoritesScreen() {
     favorite: Favorite;
   } | null>(null);
   const {colors} = useTheme();
+  const { t } = useLanguage();
   const styles = makeStyles(colors);
 
   // Process images to calculate their width
@@ -180,10 +181,7 @@ export default function FavoritesScreen() {
   const renderEmptyState = () => (
     <View style={styles.emptyContainer}>
       <Entypo name="heart-outlined" size={80} color={Colors.light.tabIconDefault} />
-      <Text style={styles.emptyTitle}>No favorites yet</Text>
-      <Text style={styles.emptyText}>
-        Right-click on any species in the Home tab to add it to your favorites
-      </Text>
+      <Text style={styles.emptyTitle}>{t('noFavorites')}</Text>
     </View>
   );
 
@@ -210,9 +208,9 @@ export default function FavoritesScreen() {
         }
       >
         <View style={styles.header}>
-          <Text style={styles.headerTitle}>My Favorites</Text>
+          <Text style={styles.headerTitle}>{t('favoritesTitle')}</Text>
           <Text style={styles.headerSubtitle}>
-            {favorites.length} {favorites.length === 1 ? 'species' : 'species'}
+            {favorites.length} {favorites.length === 1 ? t('species') : t('species')}
           </Text>
         </View>
 

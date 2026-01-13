@@ -3,6 +3,7 @@ import { useClientOnlyValue } from '@/components/useClientOnlyValue';
 import { useAuth } from '@/context/AuthContext';
 import { useFilters } from '@/context/FilterContext';
 import { useTheme } from '@/context/ThemeContext';
+import { useLanguage } from '@/context/LanguageContext';
 import { FontAwesome, FontAwesome5, Ionicons, MaterialIcons } from '@expo/vector-icons';
 import { Tabs, useRouter } from 'expo-router';
 import React, { useRef, useState } from 'react';
@@ -25,14 +26,16 @@ export default function TabLayout() {
   const [searchQuery, setSearchQuery] = useState('');
   const [isSearching, setIsSearching] = useState(false);
   const [isSearchFocused, setIsSearchFocused] = useState(false);
-  const [showMenu, setShowMenu] = useState(false);
+  const [showProfileMenu, setShowProfileMenu] = useState(false);
+  const [showLanguageMenu, setShowLanguageMenu] = useState(false);
   const [menuPosition, setMenuPosition] = useState({ x: 0, y: 0 });
   
   const { filters, isFilterVisible, setIsFilterVisible } = useFilters();
   const router = useRouter();
   const { user, logout } = useAuth();
   const searchInputRef = useRef<TextInput>(null);
-  const menuButtonRef = useRef<React.ComponentRef<typeof TouchableOpacity>>(null);
+  const profileButtonRef = useRef<React.ComponentRef<typeof TouchableOpacity>>(null);
+  const languageButtonRef = useRef<React.ComponentRef<typeof TouchableOpacity>>(null);
 
   const { width: screenWidth } = useWindowDimensions();
   const isMobile = screenWidth < 768;
@@ -44,13 +47,14 @@ export default function TabLayout() {
     : screenWidth * 0.5; // Keep 50% on mobile for cleaner layout
 
   const { colors, theme, toggleTheme } = useTheme();
-  const styles = createStyles(colors, screenWidth, isMobile);
+  const { locale, setLocale, t } = useLanguage();
+  const styles = createStyles(colors);
 
   const handleHeaderSearch = async () => {
     const cleanQuery = searchQuery.trim();
     if (!cleanQuery) return;
-    
-    setIsSearching(true);
+
+        setIsSearching(true);
     try {
       router.push({
         pathname: '/especies',
@@ -83,8 +87,20 @@ export default function TabLayout() {
           x: Math.min(pageX - 50, screenWidth - 250),
           y: pageY + height + 5,
         });
-        setShowMenu(true);
+        setShowProfileMenu(true);
       }
+    );
+  };
+  
+  const handleLanguagePress = () => {
+    (languageButtonRef.current as any)?.measure(
+        (x: number, y: number, width: number, height: number, pageX: number, pageY: number) => {
+          setMenuPosition({
+            x: pageX - 160,
+            y: pageY + height + 5,
+          });
+          setShowLanguageMenu(true);
+        }
     );
   };
 
@@ -102,8 +118,14 @@ export default function TabLayout() {
     }
   };
 
-  const closeMenu = () => {
-    setShowMenu(false);
+  const closeAllMenus = () => {
+    setShowProfileMenu(false);
+    setShowLanguageMenu(false);
+  };
+  
+  const changeLanguage = (newLocale: string) => {
+    setLocale(newLocale);
+    setShowLanguageMenu(false);
   };
 
   const MenuModal = () => (
@@ -136,7 +158,7 @@ export default function TabLayout() {
                   </View>
                   <View style={styles.userTextContainer}>
                     <Text style={styles.userName} numberOfLines={1}>
-                      {user.name || 'User'}
+                      {user.name || t('user')}
                     </Text>
                     <Text style={styles.userEmail} numberOfLines={1}>
                       {user.email || ''}
@@ -145,7 +167,6 @@ export default function TabLayout() {
                 </View>
               )}
               
-              {/* Menu items */}
               <View style={styles.menuItemsContainer}>
                 {/* Theme toggle */}
                 <TouchableOpacity 
@@ -184,8 +205,43 @@ export default function TabLayout() {
                     onPress={handleLogout}
                   >
                     <Ionicons name="log-out-outline" size={22} color="#e74c3c" />
-                    <Text style={[styles.menuItemText, styles.logoutText]}>Log Out</Text>
+                    <Text style={[styles.menuItemText, styles.logoutText]}>{t('logout')}</Text>
+                </TouchableOpacity>
+              </View>
+            </View>
+          </TouchableWithoutFeedback>
+        </View>
+      </TouchableWithoutFeedback>
+    </Modal>
+  );
+  
+  const LanguageMenu = () => (
+      <Modal
+          transparent={true}
+          visible={showLanguageMenu}
+          animationType="fade"
+          onRequestClose={closeAllMenus}
+      >
+        <TouchableWithoutFeedback onPress={closeAllMenus}>
+          <View style={styles.menuOverlay}>
+            <TouchableWithoutFeedback>
+              <View style={[styles.menuContainer, {
+                top: menuPosition.y,
+                left: Math.max(menuPosition.x, 10),
+              }]}>
+                <View style={styles.menuItemsContainer}>
+                  <TouchableOpacity
+                      style={styles.menuItem}
+                      onPress={() => changeLanguage('en')}
+                  >
+                    <Text style={styles.menuItemText}>{t('english')}</Text>
                   </TouchableOpacity>
+                  <TouchableOpacity
+                      style={styles.menuItem}
+                      onPress={() => changeLanguage('es')}
+                  >
+                    <Text style={styles.menuItemText}>{t('spanish')}</Text>
+                    </TouchableOpacity>
                 )}
                 
                 {/* Login/Profile option - only show if not logged in */}
@@ -201,12 +257,12 @@ export default function TabLayout() {
                     <Text style={styles.menuItemText}>Log In</Text>
                   </TouchableOpacity>
                 )}
+                </View>
               </View>
-            </View>
-          </TouchableWithoutFeedback>
-        </View>
-      </TouchableWithoutFeedback>
-    </Modal>
+            </TouchableWithoutFeedback>
+          </View>
+        </TouchableWithoutFeedback>
+      </Modal>
   );
 
   return (
@@ -253,8 +309,8 @@ export default function TabLayout() {
                 <TextInput
                   ref={searchInputRef}
                   style={styles.searchInput}
-                  placeholder="Ex: Sloth"
-                  placeholderTextColor={colors.background}
+                  placeholder={t('searchPlaceholder')}
+                  placeholderTextColor={colors.tabIconDefault}
                   value={searchQuery}
                   onChangeText={setSearchQuery}
                   onSubmitEditing={handleHeaderSearch}
@@ -349,7 +405,7 @@ export default function TabLayout() {
                     <FontAwesome name="adjust" style={styles.headerIcon} />
                   </TouchableOpacity>
                   
-                  <TouchableOpacity 
+                  <TouchableOpacity ref={languageButtonRef} onPress={handleLanguagePress} 
                     style={styles.headerIconButton}
                     hitSlop={{ top: 10, bottom: 10, left: 10, right: 10 }}
                   >
@@ -394,7 +450,7 @@ export default function TabLayout() {
         <Tabs.Screen
           name="index"
           options={{
-            title: 'Home',
+            title: t('home'),
             tabBarIcon: ({ color, focused }) => (
               <Ionicons name={focused ? 'home' : 'home-outline'} color={color} size={24} />
             ),
@@ -404,7 +460,7 @@ export default function TabLayout() {
         <Tabs.Screen
           name="especies"
           options={{
-            title: 'Especies',
+            title: t('species'),
             tabBarIcon: ({ color, focused }) => (
               <Ionicons name={focused ? 'leaf' : 'leaf-outline'} color={color} size={24} />
             ),
@@ -415,7 +471,7 @@ export default function TabLayout() {
         <Tabs.Screen
           name="favorites"
           options={{
-            title: 'Favorites',
+            title: t('favorites'),
             tabBarIcon: ({ color, focused }) => (
               <Ionicons name={focused ? 'star' : 'star-outline'} color={color} size={24} />
             ),
@@ -424,6 +480,7 @@ export default function TabLayout() {
       </Tabs>
       
       <MenuModal />
+      <LanguageMenu />
       <FilterOverlay onApply={handleHeaderSearch} />
     </>
   );
@@ -541,7 +598,6 @@ const createStyles = (colors: any, screenWidth: number, isMobile: boolean) => St
     width: '100%',
     height: '100%',
   },
-  // Menu styles
   menuOverlay: {
     flex: 1,
     backgroundColor: 'rgba(0, 0, 0, 0.3)',

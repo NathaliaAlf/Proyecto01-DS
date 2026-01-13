@@ -9,6 +9,7 @@ import "react-native-reanimated";
 import { useColorScheme } from "@/components/useColorScheme";
 import { AuthProvider, useAuth } from "@/context/AuthContext";
 import { ThemeProvider } from "@/context/ThemeContext";
+import { LanguageProvider } from "@/context/LanguageContext";
 
 import { FilterProvider } from '@/context/FilterContext';
 export {
@@ -38,9 +39,11 @@ export default function RootLayout() {
   return (
     <ThemeProvider>
       <AuthProvider>
-      <FilterProvider> 
-          <RootLayoutNav />
-      </FilterProvider>
+        <LanguageProvider>
+          <FilterProvider> 
+            <RootLayoutNav />
+          </FilterProvider>
+        </LanguageProvider>
       </AuthProvider>
     </ThemeProvider>
   );
