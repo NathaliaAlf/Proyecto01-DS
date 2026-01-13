@@ -1,0 +1,13 @@
+{
+  "home": "Home",
+  "species": "Species",
+  "favorites": "Favorites",
+  "searchPlaceholder": "Ex: Sloth",
+  "logout": "Log Out",
+  "english": "English",
+  "spanish": "Spanish",
+  "user": "User",
+  "favoritesTitle": "My Favorites",
+  "noFavorites": "You haven't added any favorites yet.",
+  "results": "Results:"
+}
