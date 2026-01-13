@@ -1,6 +1,7 @@
 // app/favorites.tsx or app/(tabs)/favorites.tsx
 import Colors from '@/constants/Colors';
 import { useAuth } from '@/context/AuthContext';
+import { useTheme } from '@/context/ThemeContext';
 import { Favorite, getFavorites, removeFromFavorites } from '@/services/favoritesService';
 import AntDesign from '@expo/vector-icons/AntDesign';
 import Entypo from '@expo/vector-icons/Entypo';
@@ -40,6 +41,8 @@ export default function FavoritesScreen() {
     y: number;
     favorite: Favorite;
   } | null>(null);
+  const {colors} = useTheme();
+  const styles = makeStyles(colors);
 
   // Process images to calculate their width
   const processFavorites = async (favs: Favorite[]): Promise<FavoriteWithDimensions[]> => {
@@ -285,7 +288,7 @@ export default function FavoritesScreen() {
               style={styles.contextMenuItem}
               onPress={handleOpenDetails}
             >
-              <Entypo name="eye" size={20} color={Colors.light.text} />
+              <Entypo name="eye" size={20} color={colors.text} />
               <Text style={styles.contextMenuText}>View Details</Text>
             </TouchableOpacity>
             
@@ -307,10 +310,10 @@ export default function FavoritesScreen() {
   );
 }
 
-const styles = StyleSheet.create({
+const makeStyles = (colors: any) => StyleSheet.create({
   container: {
     flex: 1,
-    backgroundColor: '#fff',
+    backgroundColor: colors.background,
   },
   loadingContainer: {
     flex: 1,
@@ -428,7 +431,7 @@ const styles = StyleSheet.create({
   },
   contextMenu: {
     position: 'absolute',
-    backgroundColor: '#fff',
+    backgroundColor: colors.background,
     borderRadius: 8,
     paddingVertical: 8,
     minWidth: 220,
@@ -454,7 +457,7 @@ const styles = StyleSheet.create({
   },
   contextMenuText: {
     fontSize: 15,
-    color: Colors.light.text,
+    color: colors.text,
     fontWeight: '500',
   },
   contextMenuTextDanger: {
@@ -462,7 +465,7 @@ const styles = StyleSheet.create({
   },
   contextMenuDivider: {
     height: 1,
-    backgroundColor: '#e0e0e0',
+    backgroundColor: colors.background,
     marginVertical: 4,
   }
 });

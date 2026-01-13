@@ -1,5 +1,5 @@
-import Colors from '@/constants/Colors';
 import { useAuth } from '@/context/AuthContext';
+import { useTheme } from '@/context/ThemeContext';
 import { addToFavorites, getFavorites, removeFromFavorites } from '@/services/favoritesService';
 import { gbifService, ImageItem } from '@/services/gbifService';
 import AntDesign from '@expo/vector-icons/AntDesign';
@@ -46,22 +46,6 @@ type SectionOffset = {
   [key: string]: number;
 };
 
-function getIcon(name: string){
-  switch(name){
-    case "Animalia": return <MaterialCommunityIcons name="dog-side" style={styles.section_icon} />
-    case "Fungi":  return <MaterialCommunityIcons name="mushroom" style={styles.section_icon} />
-    case "Plantae": return <Entypo name="flower" style={styles.section_icon} />
-    case "Mollusca": return <MaterialCommunityIcons name="snail" style={styles.section_icon} />
-    case "Arthropoda": return <MaterialCommunityIcons name="spider" style={styles.section_icon} />
-    case "Insecta": return <FontAwesome6 name="mosquito" style={styles.section_icon} />
-    case "Magnoliopsida": return <Ionicons name="flower-sharp" style={styles.section_icon} />
-    case "Lepidoptera": return <MaterialCommunityIcons name="butterfly" style={styles.section_icon} />
-    case "Coleoptera": return <Ionicons name="bug-sharp" style={styles.section_icon} />
-    case "Tracheophyta": return <MaterialCommunityIcons name="forest" style={styles.section_icon} />
-    default: return null;
-  }
-}
-
 export default function HomeScreen() {
   const router = useRouter();
   const { user } = useAuth();
@@ -70,6 +54,9 @@ export default function HomeScreen() {
   const [loadingMoreStates, setLoadingMoreStates] = useState<SectionLoadingMore>({});
   const [offsetBySection, setOffsetBySection] = useState<SectionOffset>({});
   const [favoriteKeys, setFavoriteKeys] = useState<Set<number>>(new Set());
+  const { colors } = useTheme();
+  const styles = makeStyles(colors);
+
   const [contextMenu, setContextMenu] = useState<{
     visible: boolean;
     x: number;
@@ -82,6 +69,21 @@ export default function HomeScreen() {
   } | null>(null);
   const flatListRefs = useRef<Record<string, FlatList<any> | null>>({});
 
+  function getIcon(name: string){
+    switch(name){
+      case "Animalia": return <MaterialCommunityIcons name="dog-side" style={styles.section_icon} />
+      case "Fungi":  return <MaterialCommunityIcons name="mushroom" style={styles.section_icon} />
+      case "Plantae": return <Entypo name="flower" style={styles.section_icon} />
+      case "Mollusca": return <MaterialCommunityIcons name="snail" style={styles.section_icon} />
+      case "Arthropoda": return <MaterialCommunityIcons name="spider" style={styles.section_icon} />
+      case "Insecta": return <FontAwesome6 name="mosquito" style={styles.section_icon} />
+      case "Magnoliopsida": return <Ionicons name="flower-sharp" style={styles.section_icon} />
+      case "Lepidoptera": return <MaterialCommunityIcons name="butterfly" style={styles.section_icon} />
+      case "Coleoptera": return <Ionicons name="bug-sharp" style={styles.section_icon} />
+      case "Tracheophyta": return <MaterialCommunityIcons name="forest" style={styles.section_icon} />
+      default: return null;
+    }
+  }
   // Load favorites
   useEffect(() => {
     const loadFavorites = async () => {
@@ -328,7 +330,7 @@ export default function HomeScreen() {
     
     return (
       <View style={styles.footerLoader}>
-        <ActivityIndicator size="small" color={Colors.light.tint} />
+        <ActivityIndicator size="small" color={colors.tint} />
       </View>
     );
   };
@@ -370,7 +372,7 @@ export default function HomeScreen() {
               <View style={styles.species_pics_row_container}>
                 {loadingStates[element] ? (
                   <View style={styles.loadingContainer}>
-                    <ActivityIndicator size="small" color={Colors.light.tint} />
+                    <ActivityIndicator size="small" color={colors.tint} />
                   </View>
                 ) : (
                   <FlatList
@@ -479,7 +481,7 @@ export default function HomeScreen() {
               style={styles.contextMenuItem}
               onPress={handleOpenDetails}
             >
-              <Ionicons name="information-circle-outline" size={20} color={Colors.light.text} />
+              <Ionicons name="information-circle-outline" size={20} color={colors.text} />
               <Text style={styles.contextMenuText}>View Details</Text>
             </TouchableOpacity>
             
@@ -495,7 +497,7 @@ export default function HomeScreen() {
               <Ionicons 
                 name={contextMenu.isFavorite ? "trash" : "heart-outline"} 
                 size={20} 
-                color={contextMenu.isFavorite ? "#e74c3c" : Colors.light.text} 
+                color={contextMenu.isFavorite ? "#e74c3c" : colors.text} 
               />
               <Text 
                 style={[
@@ -513,10 +515,11 @@ export default function HomeScreen() {
   );
 }
 
-const styles = StyleSheet.create({
+const makeStyles = (colors: any) =>
+StyleSheet.create({
   container: {
     flex: 1,
-    backgroundColor: '#fff',
+    backgroundColor: colors.background,
   },
   section: {
     flexDirection: "row",
@@ -525,7 +528,7 @@ const styles = StyleSheet.create({
   },
   section_icon: {
     fontSize: 35,
-    color: Colors.light.tint,
+    color: colors.selected,
     marginTop: "auto",
     marginBottom: "auto",
     marginRight: 10
@@ -539,13 +542,13 @@ const styles = StyleSheet.create({
     marginLeft: 100,
     marginRight: 100,
     borderBottomWidth: 3,
-    borderBottomColor: "#44444445",
+    borderBottomColor: colors.divider,
     alignItems: "center"
   },
   section_title: {
     fontSize: 35,
     fontWeight: "500",
-    color: Colors.light.selected
+    color: colors.selected
   },
   section_title_hovered: {
     textDecorationLine: "underline"
@@ -559,7 +562,7 @@ const styles = StyleSheet.create({
     height: IMAGE_HEIGHT,
     marginHorizontal: 5,
     overflow: 'hidden',
-    backgroundColor: Colors.light.background,
+    backgroundColor: colors.background,
     shadowColor: "#000",
     shadowOffset: {
       width: 0,
@@ -617,7 +620,7 @@ const styles = StyleSheet.create({
   },
   arrow: {
     fontSize: 40,
-    color: Colors.light.selected,
+    color: colors.selected,
   },
   arrow_container: {
     width: 100,
@@ -642,7 +645,7 @@ const styles = StyleSheet.create({
     paddingHorizontal: 20,
   },
   emptyText: {
-    color: Colors.light.tabIconDefault,
+    color: colors.tabIconDefault,
     fontStyle: "italic",
   },
   footerLoader: {
@@ -661,7 +664,7 @@ const styles = StyleSheet.create({
   },
   contextMenu: {
     position: 'absolute',
-    backgroundColor: '#fff',
+    backgroundColor: colors.background,
     borderRadius: 8,
     paddingVertical: 8,
     minWidth: 200,
@@ -687,7 +690,7 @@ const styles = StyleSheet.create({
   },
   contextMenuText: {
     fontSize: 15,
-    color: Colors.light.text,
+    color: colors.text,
     fontWeight: '500',
   },
   contextMenuTextDanger: {

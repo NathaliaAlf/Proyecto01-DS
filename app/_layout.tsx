@@ -1,5 +1,4 @@
 import FontAwesome from "@expo/vector-icons/FontAwesome";
-import { DarkTheme, DefaultTheme, ThemeProvider } from "@react-navigation/native";
 import { useFonts } from "expo-font";
 import { Stack, router, useRootNavigationState, useSegments } from "expo-router";
 import * as SplashScreen from "expo-splash-screen";
@@ -9,14 +8,13 @@ import "react-native-reanimated";
 
 import { useColorScheme } from "@/components/useColorScheme";
 import { AuthProvider, useAuth } from "@/context/AuthContext";
+import { ThemeProvider } from "@/context/ThemeContext";
 
 import { FilterProvider } from '@/context/FilterContext';
 export {
-  // Catch any errors thrown by the Layout component.
   ErrorBoundary
 } from "expo-router";
 
-// Prevent the splash screen from auto-hiding before asset loading is complete.
 SplashScreen.preventAutoHideAsync();
 
 export default function RootLayout() {
@@ -38,11 +36,13 @@ export default function RootLayout() {
   if (!loaded) return null;
 
   return (
-    <AuthProvider>
+    <ThemeProvider>
+      <AuthProvider>
       <FilterProvider> 
-        <RootLayoutNav />
+          <RootLayoutNav />
       </FilterProvider>
-    </AuthProvider>
+      </AuthProvider>
+    </ThemeProvider>
   );
 }
 
@@ -72,8 +72,10 @@ function RootLayoutNav() {
     );
   }
 
+  // Check if we're in the auth group
+  const inAuthGroup = segments[0] === '(auth)';
+
   return (
-    <ThemeProvider value={colorScheme === "dark" ? DarkTheme : DefaultTheme}>
       <Stack screenOptions={{ headerShown: false }}>
         <Stack.Screen name="(auth)" />
         <Stack.Screen name="(tabs)" />
@@ -82,6 +84,5 @@ function RootLayoutNav() {
           options={{ presentation: "modal", headerShown: true }}
         />
       </Stack>
-    </ThemeProvider>
   );
 }
