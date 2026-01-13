@@ -1,0 +1,13 @@
+{
+  "home": "Inicio",
+  "species": "Especies",
+  "favorites": "Favoritos",
+  "searchPlaceholder": "Ej: Perezoso",
+  "logout": "Cerrar sesión",
+  "english": "Inglés",
+  "spanish": "Español",
+  "user": "Usuario",
+  "favoritesTitle": "Mis Favoritos",
+  "noFavorites": "Aún no has añadido ningún favorito.",
+  "results": "Resultados:"
+}

@@ -11,6 +11,7 @@ import FilterOverlay from '@/components/FilterOverlay';
 import Colors from '@/constants/Colors';
 import { useFilters } from '@/context/FilterContext';
 import { useTheme } from '@/context/ThemeContext';
+import { useLanguage } from '@/context/LanguageContext';
 import { gbifService, ImageItem } from '@/services/gbifService';
 import { LinearGradient } from 'expo-linear-gradient';
 import { useLocalSearchParams, useRouter } from 'expo-router';
@@ -39,6 +40,7 @@ export default function SpeciesScreen() {
 
   // Obtenemos filtros y la función para cerrar el modal del contexto
   const { filters, setIsFilterVisible } = useFilters(); 
+  const { t } = useLanguage();
 
   const [results, setResults] = useState<GalleryItem[]>([]);
   const [loading, setLoading] = useState(false);
@@ -105,7 +107,7 @@ export default function SpeciesScreen() {
       />
 
       <Text style={styles.title}>
-        Resultados: {params.search}
+        {t('results')} {params.search}
       </Text>
 
       {loading ? (
