@@ -1,10 +1,12 @@
 import Colors from "@/constants/Colors";
 import { useAuth } from "@/context/AuthContext";
+import { useTheme } from "@/context/ThemeContext";
 import { Stack } from "expo-router";
-import { Image, Pressable, StyleSheet, Text } from "react-native";
+import { Image, Pressable, StyleSheet, Text, View } from "react-native";
 
 export default function AuthLayout() {
   const { login } = useAuth();
+  const { theme } = useTheme();
 
   return (
     <Stack
@@ -32,10 +34,13 @@ export default function AuthLayout() {
           </Pressable>
         ),
         headerLeft: () => (
-          <Image
-            source={require("@/assets/images/logo.png")}
-            style={styles.logo}
-          />
+          <View style={styles.headerLeft}>
+            <Image
+              source={require("@/assets/images/logo.png")}
+              style={styles.logo}
+              resizeMode="contain"
+              />
+          </View>
         ),
       }}
     />
@@ -68,9 +73,12 @@ const styles = StyleSheet.create({
     height: 24,
     marginRight: 10
   },
+  headerLeft: {
+    justifyContent: 'center',
+    alignItems: 'center',
+    marginLeft: 30
+  },
   logo:{
-    height: "35%",
-    resizeMode: "contain",
-    marginLeft: -80
+    width: 50,
   }
 });

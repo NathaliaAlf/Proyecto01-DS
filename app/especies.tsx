@@ -10,11 +10,9 @@
 import FilterOverlay from '@/components/FilterOverlay';
 import Colors from '@/constants/Colors';
 import { useFilters } from '@/context/FilterContext';
-import { useTheme } from '@/context/ThemeContext';
-import { useLanguage } from '@/context/LanguageContext';
 import { gbifService, ImageItem } from '@/services/gbifService';
 import { LinearGradient } from 'expo-linear-gradient';
-import { useLocalSearchParams, useRouter } from 'expo-router';
+import { useLocalSearchParams, useRouter, Stack } from 'expo-router';
 import React, { useEffect, useState } from 'react';
 import {
   ActivityIndicator,
@@ -40,7 +38,6 @@ export default function SpeciesScreen() {
 
   // Obtenemos filtros y la función para cerrar el modal del contexto
   const { filters, setIsFilterVisible } = useFilters(); 
-  const { t } = useLanguage();
 
   const [results, setResults] = useState<GalleryItem[]>([]);
   const [loading, setLoading] = useState(false);
@@ -91,11 +88,9 @@ export default function SpeciesScreen() {
     }
   }, [params.search, filters]); 
 
-  const {colors} = useTheme();
-  const styles = createStyles(colors);
-
   return (
-    <View style={styles.container}>
+    <View style={[styles.container, { backgroundColor: Colors[colorScheme].background }]}>
+      <Stack.Screen options={{ headerShown: true, title: 'Resultados' }} />
 
       <FilterOverlay 
         onApply={() => {
@@ -106,8 +101,8 @@ export default function SpeciesScreen() {
         }} 
       />
 
-      <Text style={styles.title}>
-        {t('results')} {params.search}
+      <Text style={[styles.title, { color: Colors[colorScheme].text }]}>
+        Resultados: {params.search}
       </Text>
 
       {loading ? (
@@ -161,57 +156,14 @@ export default function SpeciesScreen() {
   );
 }
 
-const createStyles = (colors: any) => StyleSheet.create({
-  container: { 
-    flex: 1, 
-    paddingTop: 10, 
-    backgroundColor: colors.background,
-  },
-  center: { 
-    flex: 1, 
-    justifyContent: 'center', 
-    alignItems: 'center' 
-  },
-  title: { 
-    fontSize: 22, 
-    fontWeight: 'bold', 
-    marginLeft: 20, 
-    marginBottom: 15,
-    color: colors.text,
-  },
-  listPadding: { 
-    paddingHorizontal: 10, 
-    paddingBottom: 30 
-  },
-  card: { 
-    margin: 8, 
-    borderRadius: 12, 
-    overflow: 'hidden', 
-    backgroundColor: colors.background, 
-    flex: 1 
-  },
-  image: { 
-    width: '100%', 
-    height: '100%', 
-    resizeMode: 'cover' 
-  },
-  gradient: { 
-    position: 'absolute', 
-    bottom: 0, 
-    left: 0, 
-    right: 0, 
-    height: '60%' 
-  },
-  infoContainer: { 
-    position: 'absolute', 
-    bottom: 0, 
-    left: 0, 
-    right: 0, 
-    padding: 12 
-  },
-  scientificName: { 
-    color: '#fff', 
-    fontSize: 13, 
-    fontWeight: '600' 
-  },
+const styles = StyleSheet.create({
+  container: { flex: 1, paddingTop: 10 },
+  center: { flex: 1, justifyContent: 'center', alignItems: 'center' },
+  title: { fontSize: 22, fontWeight: 'bold', marginLeft: 20, marginBottom: 15 },
+  listPadding: { paddingHorizontal: 10, paddingBottom: 30 },
+  card: { margin: 8, borderRadius: 12, overflow: 'hidden', backgroundColor: '#222', flex: 1 },
+  image: { width: '100%', height: '100%', resizeMode: 'cover' },
+  gradient: { position: 'absolute', bottom: 0, left: 0, right: 0, height: '60%' },
+  infoContainer: { position: 'absolute', bottom: 0, left: 0, right: 0, padding: 12 },
+  scientificName: { color: '#fff', fontSize: 13, fontWeight: '600' },
 });
